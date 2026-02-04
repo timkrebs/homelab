@@ -62,25 +62,27 @@ source "proxmox-iso" "ubuntu-2404" {
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot Configuration
-  # Ubuntu 24.04 uses subiquity installer which detects autoinstall from:
-  # 1. Kernel parameter 'autoinstall'
-  # 2. Cloud-init datasource with label 'cidata' or 'CIDATA'
-  # The boot command navigates GRUB menu to add autoinstall parameter
+  # Boot Configuration for Ubuntu 24.04 Live Server
+  # The boot command:
+  # 1. Waits for GRUB menu to appear
+  # 2. Presses 'e' to edit the default entry
+  # 3. Navigates to the 'linux' line (end of line)
+  # 4. Adds 'autoinstall' kernel parameter with nocloud datasource pointing to CD-ROM
+  # 5. Presses Ctrl+X to boot with modified parameters
   boot_command = [
-    "<wait5>",
-    "e<wait2>",
-    "<down><down><down><end>",
-    " autoinstall ds=nocloud;",
-    "<f10>"
+    "<wait10><wait10><wait10>",
+    "c<wait5>",
+    "linux /casper/vmlinuz autoinstall ds=nocloud\\;s=/cdrom/ ---<enter><wait5>",
+    "initrd /casper/initrd<enter><wait5>",
+    "boot<enter>"
   ]
   boot      = "order=ide2;scsi0;net0"
-  boot_wait = "10s"
+  boot_wait = "5s"
 
   # SSH Configuration
   ssh_username           = "packer"
   ssh_password           = var.ssh_password
-  ssh_timeout            = "20m"
+  ssh_timeout            = "30m"
   ssh_handshake_attempts = 100
 }
 

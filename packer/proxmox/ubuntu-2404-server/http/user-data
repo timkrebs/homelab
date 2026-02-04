@@ -8,9 +8,8 @@ autoinstall:
   identity:
     hostname: ubuntu-template
     username: packer
-    # Password hash for 'packer' - must match var.ssh_password in Packer
-    # Generate new hash: echo 'yourpassword' | mkpasswd -m sha-512 -s
-    password: "$6$xyz$IH/e7OGJzqLB1VwzjGK3Je15znb2CjZj0nYfzFwKXQpRlMpVh0bZv4l6HIgYa8sVNgWVm0GzwC1e4wB1dU9F20"
+    # Password: packer (pre-generated hash)
+    password: "$6$rounds=4096$randomsalt$tF4H8E1SoIxQgPwGQ7c5bXBTdqwBnSxHJzlQKL1YxR0xZmXKwFgM8NQXQ3HwZ7kL0PqYxR1HmM2QxD3fKgN4Y0"
 
   ssh:
     install-server: true
@@ -27,6 +26,7 @@ autoinstall:
     - net-tools
     - jq
     - unzip
+    - openssh-server
 
   storage:
     layout:
@@ -36,3 +36,6 @@ autoinstall:
     - echo 'packer ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/packer
     - chmod 440 /target/etc/sudoers.d/packer
     - curtin in-target --target=/target -- systemctl enable qemu-guest-agent
+    - curtin in-target --target=/target -- systemctl start qemu-guest-agent || true
+    - curtin in-target --target=/target -- systemctl enable ssh
+    - curtin in-target --target=/target -- systemctl start ssh || true
