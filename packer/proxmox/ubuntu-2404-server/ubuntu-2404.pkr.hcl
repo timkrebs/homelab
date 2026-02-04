@@ -62,18 +62,20 @@ source "proxmox-iso" "ubuntu-2404" {
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot Configuration - autoinstall auto-detects CD-ROM with cidata label
+  # Boot Configuration
+  # Ubuntu 24.04 uses subiquity installer which detects autoinstall from:
+  # 1. Kernel parameter 'autoinstall'
+  # 2. Cloud-init datasource with label 'cidata' or 'CIDATA'
+  # The boot command navigates GRUB menu to add autoinstall parameter
   boot_command = [
-    "c<wait>",
-    "linux /casper/vmlinuz --- autoinstall",
-    "<enter><wait>",
-    "initrd /casper/initrd",
-    "<enter><wait>",
-    "boot",
-    "<enter>"
+    "<wait5>",
+    "e<wait2>",
+    "<down><down><down><end>",
+    " autoinstall ds=nocloud;",
+    "<f10>"
   ]
-  boot      = "order=scsi0;ide2;net0"
-  boot_wait = "5s"
+  boot      = "order=ide2;scsi0;net0"
+  boot_wait = "10s"
 
   # SSH Configuration
   ssh_username           = "packer"
