@@ -1,0 +1,12 @@
+# Default owner for everything
+* @timkrebs9
+
+# Infrastructure code requires review
+/terraform/ @timkrebs9
+/packer/ @timkrebs9
+
+# Kubernetes manifests
+/kubernetes/ @timkrebs9
+
+# CI/CD workflows
+/.github/ @timkrebs9

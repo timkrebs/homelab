@@ -1,0 +1,92 @@
+name: Packer Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      template:
+        description: 'Packer template to build'
+        required: true
+        default: 'ubuntu-2404-server'
+        type: choice
+        options:
+          - ubuntu-2404-server
+          - debian-12
+  push:
+    branches: [main]
+    paths:
+      - 'packer/**'
+
+env:
+  PACKER_VERSION: "1.10.0"
+  HCP_CLIENT_ID: ${{ secrets.HCP_CLIENT_ID }}
+  HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+  HCP_PROJECT_ID: ${{ secrets.HCP_PROJECT_ID }}
+
+jobs:
+  determine-template:
+    name: Determine Template to Build
+    runs-on: ubuntu-latest
+    outputs:
+      template: ${{ steps.set-template.outputs.template }}
+      should_build: ${{ steps.set-template.outputs.should_build }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Determine template
+        id: set-template
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "template=${{ github.event.inputs.template }}" >> $GITHUB_OUTPUT
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            # Check which packer templates changed
+            CHANGED=$(git diff --name-only HEAD~1 HEAD -- packer/)
+            if echo "$CHANGED" | grep -q "ubuntu-2404-server"; then
+              echo "template=ubuntu-2404-server" >> $GITHUB_OUTPUT
+              echo "should_build=true" >> $GITHUB_OUTPUT
+            else
+              echo "template=none" >> $GITHUB_OUTPUT
+              echo "should_build=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  build:
+    name: Build Packer Image
+    runs-on: ubuntu-latest
+    needs: determine-template
+    if: needs.determine-template.outputs.should_build == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Packer Init
+        run: packer init .
+        working-directory: packer/proxmox/${{ needs.determine-template.outputs.template }}
+
+      - name: Packer Build
+        run: |
+          packer build \
+            -var "proxmox_api_url=${{ secrets.PROXMOX_API_URL }}" \
+            -var "proxmox_api_token_id=${{ secrets.PROXMOX_API_TOKEN_ID }}" \
+            -var "proxmox_api_token_secret=${{ secrets.PROXMOX_API_TOKEN_SECRET }}" \
+            -var "ssh_password=${{ secrets.PACKER_SSH_PASSWORD }}" \
+            .
+        working-directory: packer/proxmox/${{ needs.determine-template.outputs.template }}
+        env:
+          PACKER_LOG: 1
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Packer Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Template: ${{ needs.determine-template.outputs.template }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Trigger: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY

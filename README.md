@@ -119,7 +119,16 @@ Add the following secrets to your GitHub repository at `Settings > Secrets and v
 | `PROXMOX_API_TOKEN_SECRET` | API token secret |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token with DNS edit permissions |
 | `CLOUDFLARE_ZONE_ID` | Cloudflare zone ID for your domain |
-| `PACKER_SSH_PASSWORD` | SSH password for Packer VM builds |
+| `PACKER_SSH_PASSWORD` | Temporary password for Packer builds (default: `packer`) |
+
+**Note:** The `PACKER_SSH_PASSWORD` must match the password hash in `packer/proxmox/ubuntu-2404-server/http/user-data`. The default is `packer`. To change it:
+
+```bash
+# Generate a new password hash
+echo 'your-new-password' | mkpasswd -m sha-512 -s
+
+# Update the hash in http/user-data and set PACKER_SSH_PASSWORD to 'your-new-password'
+```
 
 ### Step 3: Create Proxmox API Token
 
