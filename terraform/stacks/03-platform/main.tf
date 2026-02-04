@@ -1,12 +1,9 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  cloud {
-    organization = "REPLACE_WITH_YOUR_ORG"
-
-    workspaces {
-      name = "homelab-platform"
-    }
+  # Backend configuration - use local state for homelab
+  backend "local" {
+    path = "terraform.tfstate"
   }
 
   required_providers {
@@ -27,13 +24,10 @@ terraform {
 
 # Reference outputs from 02-kubernetes
 data "terraform_remote_state" "kubernetes" {
-  backend = "remote"
+  backend = "local"
 
   config = {
-    organization = "REPLACE_WITH_YOUR_ORG"
-    workspaces = {
-      name = "homelab-kubernetes"
-    }
+    path = "../02-kubernetes/terraform.tfstate"
   }
 }
 

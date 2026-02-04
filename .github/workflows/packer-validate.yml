@@ -1,0 +1,55 @@
+name: Packer Validate
+
+on:
+  workflow_dispatch:
+    inputs:
+      template:
+        description: 'Packer template to validate'
+        required: true
+        default: 'ubuntu-2404-server'
+        type: choice
+        options:
+          - ubuntu-2404-server
+  push:
+    branches: [main]
+    paths:
+      - 'packer/**'
+  pull_request:
+    paths:
+      - 'packer/**'
+
+env:
+  PACKER_VERSION: "1.10.0"
+
+jobs:
+  validate:
+    name: Validate Packer Templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Packer Format Check
+        run: packer fmt -check -recursive packer/
+
+      - name: Packer Init
+        run: packer init .
+        working-directory: packer/proxmox/ubuntu-2404-server
+
+      - name: Packer Validate
+        run: packer validate -syntax-only .
+        working-directory: packer/proxmox/ubuntu-2404-server
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Packer Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Template: ubuntu-2404-server" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Note**: Actual builds should be run locally with access to Proxmox." >> $GITHUB_STEP_SUMMARY
