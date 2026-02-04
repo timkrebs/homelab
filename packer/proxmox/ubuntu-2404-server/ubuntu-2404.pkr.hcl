@@ -21,7 +21,7 @@ source "proxmox-iso" "ubuntu-2404" {
   template_description = "Ubuntu 24.04 Server - Built ${timestamp()}"
 
   # ISO Configuration
-  iso_file         = "local:iso/ubuntu-24.04-live-server-amd64.iso"
+  iso_file         = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
   iso_storage_pool = "local"
   unmount_iso      = true
 

@@ -10,8 +10,16 @@ on:
         type: choice
         options:
           - ubuntu-2404-server
+      run_build:
+        description: 'Run actual build (requires self-hosted runner with Proxmox access)'
+        required: true
+        type: boolean
+        default: false
   push:
     branches: [main]
+    paths:
+      - 'packer/**'
+  pull_request:
     paths:
       - 'packer/**'
 
@@ -42,11 +50,28 @@ jobs:
         run: packer validate -syntax-only .
         working-directory: packer/proxmox/ubuntu-2404-server
 
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Packer Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Template: ubuntu-2404-server" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Local Build Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "Packer builds require direct access to Proxmox. Run locally:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo 'cd packer/proxmox/ubuntu-2404-server' >> $GITHUB_STEP_SUMMARY
+          echo 'packer init .' >> $GITHUB_STEP_SUMMARY
+          echo 'packer build -var-file=variables.pkrvars.hcl .' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # NOTE: This job requires a self-hosted runner with network access to Proxmox
+  # To use: set up a self-hosted runner labeled 'proxmox' in your homelab
   build:
-    name: Build Packer Image
-    runs-on: ubuntu-latest
+    name: Build Packer Image (Self-Hosted)
+    runs-on: [self-hosted, proxmox]
     needs: validate
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_build == 'true'
     environment: production
     steps:
       - name: Checkout

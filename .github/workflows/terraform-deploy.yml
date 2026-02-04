@@ -20,6 +20,11 @@ on:
         options:
           - plan
           - apply
+      use_self_hosted:
+        description: 'Use self-hosted runner (required for Proxmox access)'
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -61,12 +66,28 @@ jobs:
       - name: Terraform Init
         run: terraform init -backend=false
 
-      - name: Terraform Validate
-        run: terraform validate
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Terraform Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Stack: ${{ matrix.stack }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Local Execution" >> $GITHUB_STEP_SUMMARY
+          echo "For plan/apply, Terraform Cloud must have network access to Proxmox." >> $GITHUB_STEP_SUMMARY
+          echo "If using Terraform Cloud's remote execution, configure an agent in your homelab." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To run locally:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo 'cd terraform/stacks/${{ matrix.stack }}' >> $GITHUB_STEP_SUMMARY
+          echo 'export TF_CLOUD_ORGANIZATION="your-org"' >> $GITHUB_STEP_SUMMARY
+          echo 'terraform init' >> $GITHUB_STEP_SUMMARY
+          echo 'terraform plan' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
   plan:
     name: Terraform Plan
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.inputs.use_self_hosted == 'true' && fromJSON('["self-hosted", "proxmox"]') || 'ubuntu-latest' }}
     needs: validate
     if: github.event_name == 'workflow_dispatch'
     environment: production
@@ -117,7 +138,7 @@ jobs:
 
   apply:
     name: Terraform Apply
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.inputs.use_self_hosted == 'true' && fromJSON('["self-hosted", "proxmox"]') || 'ubuntu-latest' }}
     needs: plan
     if: github.event.inputs.action == 'apply'
     environment: production
