@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/modules/proxmox-vm"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/stacks/01-infrastructure"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"

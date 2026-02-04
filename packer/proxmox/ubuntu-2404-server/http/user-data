@@ -1,0 +1,38 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  identity:
+    hostname: ubuntu-template
+    username: packer
+    # Password hash for 'packer' - must match var.ssh_password in Packer
+    # Generate new hash: echo 'yourpassword' | mkpasswd -m sha-512 -s
+    password: "$6$xyz$IH/e7OGJzqLB1VwzjGK3Je15znb2CjZj0nYfzFwKXQpRlMpVh0bZv4l6HIgYa8sVNgWVm0GzwC1e4wB1dU9F20"
+
+  ssh:
+    install-server: true
+    allow-pw: true
+
+  packages:
+    - qemu-guest-agent
+    - cloud-init
+    - cloud-guest-utils
+    - curl
+    - wget
+    - vim
+    - htop
+    - net-tools
+    - jq
+    - unzip
+
+  storage:
+    layout:
+      name: lvm
+
+  late-commands:
+    - echo 'packer ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/packer
+    - chmod 440 /target/etc/sudoers.d/packer
+    - curtin in-target --target=/target -- systemctl enable qemu-guest-agent

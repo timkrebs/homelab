@@ -1,0 +1,31 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: vault-ingress
+  namespace: vault-system
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`vault.proxcloud.io`)
+      kind: Rule
+      services:
+        - name: vault-active
+          port: 8200
+  tls:
+    secretName: vault-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vault-tls
+  namespace: vault-system
+spec:
+  secretName: vault-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - vault.proxcloud.io

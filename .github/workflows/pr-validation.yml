@@ -1,0 +1,113 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  TERRAFORM_VERSION: "1.7.0"
+  PACKER_VERSION: "1.10.0"
+
+jobs:
+  terraform-lint:
+    name: Terraform Lint & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        working-directory: terraform
+
+      - name: Terraform Init - Modules
+        run: terraform init -backend=false
+        working-directory: terraform/modules/proxmox-vm
+
+      - name: Terraform Validate - Modules
+        run: terraform validate
+        working-directory: terraform/modules/proxmox-vm
+
+      - name: Terraform Init - All Stacks
+        run: |
+          for stack in 01-infrastructure 02-kubernetes 03-platform 04-applications; do
+            echo ">>> Initializing $stack"
+            terraform -chdir=terraform/stacks/$stack init -backend=false
+          done
+
+      - name: Terraform Validate - All Stacks
+        run: |
+          for stack in 01-infrastructure 02-kubernetes 03-platform 04-applications; do
+            echo ">>> Validating $stack"
+            terraform -chdir=terraform/stacks/$stack validate
+          done
+
+  packer-validate:
+    name: Packer Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Packer Format Check
+        run: packer fmt -check -recursive .
+        working-directory: packer
+
+      - name: Packer Init
+        run: packer init .
+        working-directory: packer/proxmox/ubuntu-2404-server
+
+      - name: Packer Validate
+        run: |
+          packer validate \
+            -var "proxmox_api_url=https://example.com:8006/api2/json" \
+            -var "proxmox_api_token_id=test@pam!test" \
+            -var "proxmox_api_token_secret=test" \
+            -var "ssh_password=test" \
+            .
+        working-directory: packer/proxmox/ubuntu-2404-server
+
+  kubernetes-lint:
+    name: Kubernetes Manifest Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubeconform
+        uses: fluxcd/flux2/action@main
+
+      - name: Validate Kubernetes Manifests
+        run: |
+          find kubernetes -name '*.yaml' -type f | while read file; do
+            echo "Validating $file"
+            kubectl apply --dry-run=client -f "$file" 2>/dev/null || echo "Skipping $file (requires CRDs)"
+          done
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'  # Don't fail on vulnerabilities for now

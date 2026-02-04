@@ -1,0 +1,53 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta2
+kind: HelmRelease
+metadata:
+  name: traefik
+  namespace: traefik-system
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: traefik
+      version: "26.x"
+      sourceRef:
+        kind: HelmRepository
+        name: traefik
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    deployment:
+      replicas: 1
+    service:
+      type: LoadBalancer
+      annotations:
+        metallb.universe.tf/loadBalancerIPs: "10.10.2.100"
+    ports:
+      web:
+        redirectTo:
+          port: websecure
+      websecure:
+        tls:
+          enabled: true
+    ingressRoute:
+      dashboard:
+        enabled: false
+    providers:
+      kubernetesIngress:
+        publishedService:
+          enabled: true
+    logs:
+      general:
+        level: INFO
+      access:
+        enabled: true
+    metrics:
+      prometheus:
+        entryPoint: metrics
+    globalArguments:
+      - "--global.checknewversion=false"
+      - "--global.sendanonymoususage=false"
