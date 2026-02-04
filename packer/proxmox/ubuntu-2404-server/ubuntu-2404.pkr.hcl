@@ -2,7 +2,7 @@ packer {
   required_plugins {
     proxmox = {
       source  = "github.com/hashicorp/proxmox"
-      version = ">= 1.1.6"
+      version = ">= 1.2.0"
     }
   }
 }
@@ -20,10 +20,20 @@ source "proxmox-iso" "ubuntu-2404" {
   vm_name              = "ubuntu-2404-template"
   template_description = "Ubuntu 24.04 Server - Built ${timestamp()}"
 
-  # ISO Configuration
-  iso_file         = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
-  iso_storage_pool = "local"
-  unmount_iso      = true
+  # Boot ISO Configuration
+  boot_iso {
+    iso_file         = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
+    iso_storage_pool = "local"
+    unmount          = true
+  }
+
+  # Cloud-init autoinstall via CD-ROM (works from GitHub runners without HTTP connectivity)
+  additional_iso_files {
+    cd_files         = ["./http/meta-data", "./http/user-data"]
+    cd_label         = "cidata"
+    iso_storage_pool = "local"
+    unmount          = true
+  }
 
   # System
   qemu_agent      = true
@@ -48,14 +58,14 @@ source "proxmox-iso" "ubuntu-2404" {
     firewall = false
   }
 
-  # Cloud-Init
+  # Cloud-Init for post-install
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot Configuration
+  # Boot Configuration - use autoinstall with CD-ROM datasource
   boot_command = [
     "c<wait>",
-    "linux /casper/vmlinuz --- autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/'",
+    "linux /casper/vmlinuz --- autoinstall ds='nocloud;s=/cidata/'",
     "<enter><wait>",
     "initrd /casper/initrd",
     "<enter><wait>",
@@ -64,9 +74,6 @@ source "proxmox-iso" "ubuntu-2404" {
   ]
   boot      = "order=scsi0;ide2;net0"
   boot_wait = "5s"
-
-  # HTTP Server for autoinstall
-  http_directory = "http"
 
   # SSH Configuration
   ssh_username           = "packer"
