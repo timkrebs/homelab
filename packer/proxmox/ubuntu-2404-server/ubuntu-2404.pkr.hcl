@@ -32,6 +32,14 @@ source "proxmox-iso" "ubuntu-2404" {
     iso_checksum = "e240e4b801f7bb68c20d1356b60968ad0c33a41d00d828e74ceb3364a0317be9"
   }
 
+  # Cloud-init ISO for autoinstall (more reliable than HTTP for remote Proxmox)
+  additional_iso_files {
+    cd_files         = ["./http/meta-data", "./http/user-data"]
+    cd_label         = "cidata"
+    iso_storage_pool = "local"
+    unmount          = true
+  }
+
   # VM System Settings
   qemu_agent = true
 
@@ -62,21 +70,17 @@ source "proxmox-iso" "ubuntu-2404" {
   cloud_init_storage_pool = var.storage_pool
 
   # PACKER Boot Commands
-  # Uses GRUB command line to boot with autoinstall pointing to HTTP server
-  boot              = "c"
-  boot_wait         = "10s"
-  boot_key_interval = "500ms"
+  # Uses GRUB command line to boot with autoinstall
+  # The cloud-init config is served from the attached ISO with label "cidata"
+  boot_wait         = "5s"
+  boot_key_interval = "50ms"
   boot_command = [
     "<esc><wait>",
-    "e<wait>",
-    "<down><down><down><end>",
-    "<bs><bs><bs><bs><wait>",
-    "autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<wait>",
-    "<f10><wait>"
+    "c<wait5s>",
+    "linux /casper/vmlinuz autoinstall ds=nocloud ---<enter><wait5s>",
+    "initrd /casper/initrd<enter><wait5s>",
+    "boot<enter>"
   ]
-
-  # PACKER Autoinstall Settings - HTTP server for cloud-init
-  http_directory = "http"
 
   # SSH Settings
   ssh_username = "packer"

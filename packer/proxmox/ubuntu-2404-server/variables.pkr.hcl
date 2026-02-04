@@ -41,5 +41,6 @@ variable "storage_pool" {
 variable "ssh_password" {
   type        = string
   sensitive   = true
-  description = "SSH password for packer user during build"
+  default     = "packer"
+  description = "SSH password for packer user during build (must match user-data)"
 }

@@ -7,18 +7,18 @@ autoinstall:
   refresh-installer:
     update: no
   network:
-    network:
-      version: 2
-      ethernets:
-        ens18:
-          dhcp4: true
-          dhcp-identifier: mac
+    version: 2
+    ethernets:
+      ens18:
+        dhcp4: true
+        dhcp-identifier: mac
+  identity:
+    hostname: ubuntu-template
+    username: packer
+    password: "$6$packersa$p46UIkeTFQ4qHIRxrmU155wruG49wsi8K8Paw0bjOKQSeqhnMSpmeqWAy8UPZJHmHzYf2c0utbc4lQaQzlhek0"
   ssh:
     install-server: true
     allow-pw: true
-    disable_root: true
-    ssh_quiet_keygen: true
-    allow_public_ssh_keys: true
   packages:
     - qemu-guest-agent
     - openssh-server
@@ -40,15 +40,10 @@ autoinstall:
   user-data:
     package_upgrade: false
     timezone: UTC
-    users:
-      - name: packer
-        plain_text_passwd: "packer"
-        groups: [adm, sudo]
-        lock_passwd: false
-        sudo: ALL=(ALL) NOPASSWD:ALL
-        shell: /bin/bash
   late-commands:
+    - curtin in-target --target=/target -- passwd -d packer
+    - curtin in-target --target=/target -- sh -c 'echo "packer:packer" | chpasswd'
+    - curtin in-target --target=/target -- sh -c 'echo "packer ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/packer'
+    - curtin in-target --target=/target -- chmod 440 /etc/sudoers.d/packer
     - curtin in-target --target=/target -- systemctl enable qemu-guest-agent
-    - curtin in-target --target=/target -- systemctl start qemu-guest-agent
     - curtin in-target --target=/target -- systemctl enable ssh
-    - curtin in-target --target=/target -- systemctl start ssh
