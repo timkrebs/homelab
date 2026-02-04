@@ -20,9 +20,6 @@ source "proxmox-iso" "ubuntu-2404" {
   vm_name              = "ubuntu-2404-template"
   template_description = "Ubuntu 24.04 Server - Built ${timestamp()}"
 
-  # Force overwrite existing VM with same ID (for CI/CD reruns)
-  force = true
-
   # Boot ISO Configuration
   boot_iso {
     iso_file         = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"

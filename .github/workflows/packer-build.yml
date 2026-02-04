@@ -81,7 +81,7 @@ jobs:
 
       - name: Packer Build
         run: |
-          packer build \
+          packer build -force \
             -var "proxmox_api_url=${{ secrets.PROXMOX_API_URL }}" \
             -var "proxmox_api_token_id=${{ secrets.PROXMOX_API_TOKEN_ID }}" \
             -var "proxmox_api_token_secret=${{ secrets.PROXMOX_API_TOKEN_SECRET }}" \
