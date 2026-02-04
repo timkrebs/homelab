@@ -3,9 +3,9 @@ autoinstall:
   version: 1
   locale: en_US
   keyboard:
-    layout: us
+    layout: de
   refresh-installer:
-    update: no
+    update: yes
   network:
     network:
       version: 2
@@ -23,15 +23,6 @@ autoinstall:
     - qemu-guest-agent
     - openssh-server
     - sudo
-    - curl
-    - wget
-    - vim
-    - htop
-    - net-tools
-    - jq
-    - unzip
-    - cloud-init
-    - cloud-guest-utils
   storage:
     layout:
       name: direct
@@ -39,10 +30,10 @@ autoinstall:
       size: 0
   user-data:
     package_upgrade: false
-    timezone: UTC
+    timezone: Europe/Berlin
     users:
-      - name: packer
-        plain_text_passwd: "packer"
+      - name: timkrebs
+        plain_text_passwd: "Z+eGmMKtb5hn"
         groups: [adm, sudo]
         lock_passwd: false
         sudo: ALL=(ALL) NOPASSWD:ALL
@@ -52,3 +43,4 @@ autoinstall:
     - curtin in-target --target=/target -- systemctl start qemu-guest-agent
     - curtin in-target --target=/target -- systemctl enable ssh
     - curtin in-target --target=/target -- systemctl start ssh
+  shutdown: poweroff

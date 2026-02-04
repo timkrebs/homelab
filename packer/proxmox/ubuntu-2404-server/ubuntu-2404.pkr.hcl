@@ -1,3 +1,6 @@
+# Ubuntu 24.04 Server Template for Proxmox
+# Based on working ubuntu-server-noble configuration
+
 packer {
   required_plugins {
     proxmox = {
@@ -7,87 +10,82 @@ packer {
   }
 }
 
+# Resource Definition for the VM Template
 source "proxmox-iso" "ubuntu-2404" {
-  # Proxmox Connection
+  # Proxmox Connection Settings
   proxmox_url              = var.proxmox_api_url
   username                 = var.proxmox_api_token_id
   token                    = var.proxmox_api_token_secret
   insecure_skip_tls_verify = var.proxmox_skip_tls_verify
-  node                     = var.proxmox_node
 
-  # VM Configuration
+  # VM General Settings
+  node                 = var.proxmox_node
   vm_id                = var.vm_id
   vm_name              = "ubuntu-2404-template"
   template_description = "Ubuntu 24.04 Server - Built ${timestamp()}"
 
-  # Boot ISO Configuration
+  # VM OS Settings - Local ISO File
   boot_iso {
-    iso_file         = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
-    iso_storage_pool = "local"
-    unmount          = true
-  }
-
-  # Cloud-init autoinstall via CD-ROM (works from GitHub runners without HTTP connectivity)
-  additional_iso_files {
-    cd_files         = ["./http/meta-data", "./http/user-data"]
-    cd_label         = "cidata"
-    iso_storage_pool = "local"
-    unmount          = true
-  }
-
-  # System
-  qemu_agent      = true
-  scsi_controller = "virtio-scsi-pci"
-
-  # CPU & Memory
-  cores  = 2
-  memory = 2048
-
-  # Disk
-  disks {
-    disk_size    = "20G"
-    storage_pool = var.storage_pool
     type         = "scsi"
-    format       = "raw"
+    iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
+    unmount      = true
+    iso_checksum = "e240e4b801f7bb68c20d1356b60968ad0c33a41d00d828e74ceb3364a0317be9"
   }
 
-  # Network
+  # VM System Settings
+  qemu_agent = true
+
+  # VM Hard Disk Settings
+  scsi_controller = "virtio-scsi-pci"
+  disks {
+    disk_size    = "25G"
+    storage_pool = var.storage_pool
+    type         = "virtio"
+  }
+
+  # VM CPU Settings
+  cores = 2
+
+  # VM Memory Settings
+  memory = 2048
+  os     = "l26"
+
+  # VM Network Settings
   network_adapters {
     model    = "virtio"
     bridge   = "vmbr0"
     firewall = false
   }
 
-  # Cloud-Init for post-install
+  # VM Cloud-Init Settings
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot Configuration for Ubuntu 24.04 Live Server
-  # The boot command uses GRUB edit mode to add autoinstall parameter:
-  # 1. Wait for GRUB menu to appear
-  # 2. Press 'e' to edit the default menu entry
-  # 3. Navigate down to the 'linux' line and go to end
-  # 4. Add 'autoinstall' kernel parameter (cloud-init auto-detects cidata CD)
-  # 5. Press F10 to boot with modified parameters
+  # PACKER Boot Commands
+  # Uses GRUB command line to boot with autoinstall pointing to HTTP server
+  boot              = "c"
+  boot_wait         = "10s"
+  boot_key_interval = "500ms"
   boot_command = [
-    "<wait10><wait10><wait10><wait10>",
-    "e",
-    "<wait2>",
+    "<esc><wait>",
+    "e<wait>",
     "<down><down><down><end>",
-    " autoinstall",
-    "<wait1>",
-    "<f10>"
+    "<bs><bs><bs><bs><wait>",
+    "autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<wait>",
+    "<f10><wait>"
   ]
-  boot      = "order=ide2;scsi0;net0"
-  boot_wait = "5s"
 
-  # SSH Configuration
-  ssh_username           = "packer"
-  ssh_password           = var.ssh_password
-  ssh_timeout            = "30m"
-  ssh_handshake_attempts = 100
+  # PACKER Autoinstall Settings - HTTP server for cloud-init
+  http_directory = "http"
+
+  # SSH Settings
+  ssh_username = "packer"
+  ssh_password = var.ssh_password
+  ssh_timeout  = "30m"
+  ssh_pty      = true
 }
 
+# Build Definition to create the VM Template
 build {
   name    = "ubuntu-2404"
   sources = ["source.proxmox-iso.ubuntu-2404"]
@@ -109,12 +107,33 @@ build {
     }
   }
 
-  # Wait for cloud-init to complete
+  # Provisioning the VM Template for Cloud-Init Integration in Proxmox
   provisioner "shell" {
-    inline = ["while [ ! -f /var/lib/cloud/instance/boot-finished ]; do sleep 1; done"]
+    inline = [
+      "while [ ! -f /var/lib/cloud/instance/boot-finished ]; do echo 'Waiting for cloud-init...'; sleep 1; done",
+      "sudo rm /etc/ssh/ssh_host_*",
+      "sudo truncate -s 0 /etc/machine-id",
+      "sudo apt -y autoremove --purge",
+      "sudo apt -y clean",
+      "sudo apt -y autoclean",
+      "sudo cloud-init clean",
+      "sudo rm -f /etc/cloud/cloud.cfg.d/subiquity-disable-cloudinit-networking.cfg",
+      "sudo rm -f /etc/netplan/*.yaml",
+      "sudo sync"
+    ]
   }
 
-  # Run setup scripts
+  # Add cloud-init configuration for Proxmox
+  provisioner "file" {
+    source      = "files/99-pve.cfg"
+    destination = "/tmp/99-pve.cfg"
+  }
+
+  provisioner "shell" {
+    inline = ["sudo cp /tmp/99-pve.cfg /etc/cloud/cloud.cfg.d/99-pve.cfg"]
+  }
+
+  # Run additional setup scripts
   provisioner "shell" {
     scripts = [
       "scripts/setup.sh",
