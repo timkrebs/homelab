@@ -83,7 +83,7 @@ jobs:
   # GitHub-hosted runners CANNOT reach private homelab networks.
   build:
     name: Build Packer Image (Self-Hosted)
-    runs-on: [self-hosted, proxmox]
+    runs-on: proxmox
     needs: validate
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_build == 'true'
     environment: production
@@ -91,12 +91,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install ISO creation tools
+      - name: Install required tools
         run: |
           if command -v apt-get &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y xorriso
+            sudo apt-get update && sudo apt-get install -y xorriso unzip zip curl wget
           elif command -v brew &> /dev/null; then
-            brew install xorriso || true
+            brew install xorriso unzip || true
           fi
 
       - name: Setup Packer
