@@ -63,18 +63,20 @@ source "proxmox-iso" "ubuntu-2404" {
   cloud_init_storage_pool = var.storage_pool
 
   # Boot Configuration for Ubuntu 24.04 Live Server
-  # The boot command:
-  # 1. Waits for GRUB menu to appear
-  # 2. Presses 'e' to edit the default entry
-  # 3. Navigates to the 'linux' line (end of line)
-  # 4. Adds 'autoinstall' kernel parameter with nocloud datasource pointing to CD-ROM
-  # 5. Presses Ctrl+X to boot with modified parameters
+  # The boot command uses GRUB edit mode to add autoinstall parameter:
+  # 1. Wait for GRUB menu to appear
+  # 2. Press 'e' to edit the default menu entry
+  # 3. Navigate down to the 'linux' line and go to end
+  # 4. Add 'autoinstall' kernel parameter (cloud-init auto-detects cidata CD)
+  # 5. Press F10 to boot with modified parameters
   boot_command = [
-    "<wait10><wait10><wait10>",
-    "c<wait5>",
-    "linux /casper/vmlinuz autoinstall ds=nocloud\\;s=/cdrom/ ---<enter><wait5>",
-    "initrd /casper/initrd<enter><wait5>",
-    "boot<enter>"
+    "<wait10><wait10><wait10><wait10>",
+    "e",
+    "<wait2>",
+    "<down><down><down><end>",
+    " autoinstall",
+    "<wait1>",
+    "<f10>"
   ]
   boot      = "order=ide2;scsi0;net0"
   boot_wait = "5s"
