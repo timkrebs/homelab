@@ -79,6 +79,23 @@ build {
   name    = "ubuntu-2404"
   sources = ["source.proxmox-iso.ubuntu-2404"]
 
+  # HCP Packer Registry - credentials via HCP_CLIENT_ID, HCP_CLIENT_SECRET, HCP_PROJECT_ID env vars
+  hcp_packer_registry {
+    bucket_name = "ubuntu-2404-server"
+    description = "Ubuntu 24.04 LTS Server for Kubernetes nodes"
+
+    bucket_labels = {
+      "os"      = "ubuntu"
+      "version" = "24.04"
+      "purpose" = "kubernetes"
+    }
+
+    build_labels = {
+      "build-time"   = timestamp()
+      "build-source" = basename(path.cwd)
+    }
+  }
+
   # Wait for cloud-init to complete
   provisioner "shell" {
     inline = ["while [ ! -f /var/lib/cloud/instance/boot-finished ]; do sleep 1; done"]

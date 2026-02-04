@@ -1,0 +1,85 @@
+name: Packer Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      template:
+        description: 'Packer template to build'
+        required: true
+        default: 'ubuntu-2404-server'
+        type: choice
+        options:
+          - ubuntu-2404-server
+  push:
+    branches: [main]
+    paths:
+      - 'packer/**'
+
+env:
+  PACKER_VERSION: "1.10.0"
+
+jobs:
+  validate:
+    name: Validate Packer Template
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Packer Format Check
+        run: packer fmt -check -recursive packer/
+
+      - name: Packer Init
+        run: packer init .
+        working-directory: packer/proxmox/ubuntu-2404-server
+
+      - name: Packer Validate (syntax only)
+        run: packer validate -syntax-only .
+        working-directory: packer/proxmox/ubuntu-2404-server
+
+  build:
+    name: Build Packer Image
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'workflow_dispatch'
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Packer Init
+        run: packer init .
+        working-directory: packer/proxmox/${{ github.event.inputs.template }}
+
+      - name: Packer Build
+        run: |
+          packer build \
+            -var "proxmox_api_url=${{ secrets.PROXMOX_API_URL }}" \
+            -var "proxmox_api_token_id=${{ secrets.PROXMOX_API_TOKEN_ID }}" \
+            -var "proxmox_api_token_secret=${{ secrets.PROXMOX_API_TOKEN_SECRET }}" \
+            -var "ssh_password=${{ secrets.PACKER_SSH_PASSWORD }}" \
+            .
+        working-directory: packer/proxmox/${{ github.event.inputs.template }}
+        env:
+          HCP_CLIENT_ID: ${{ secrets.HCP_CLIENT_ID }}
+          HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+          HCP_PROJECT_ID: ${{ secrets.HCP_PROJECT_ID }}
+          PACKER_LOG: 1
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Packer Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Template: ${{ github.event.inputs.template }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- HCP Packer Registry: Enabled" >> $GITHUB_STEP_SUMMARY

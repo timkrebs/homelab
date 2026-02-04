@@ -36,9 +36,3 @@ variable "ssh_public_key" {
   type        = string
   description = "SSH public key for VM access"
 }
-
-variable "vm_template_name" {
-  type        = string
-  default     = "ubuntu-2404-template"
-  description = "Name of the Packer-built VM template to clone"
-}

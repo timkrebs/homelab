@@ -1,16 +1,22 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  # Backend configuration - use local state for homelab
-  # For production, consider using a remote backend like S3, GCS, or Terraform Cloud
-  backend "local" {
-    path = "terraform.tfstate"
+  # Terraform Cloud backend - organization set via TF_CLOUD_ORGANIZATION env var
+  # Token set via TF_API_TOKEN env var
+  cloud {
+    workspaces {
+      name = "homelab-infrastructure"
+    }
   }
 
   required_providers {
     proxmox = {
       source  = "bpg/proxmox"
       version = "~> 0.50"
+    }
+    hcp = {
+      source  = "hashicorp/hcp"
+      version = "~> 0.80"
     }
   }
 }
@@ -26,9 +32,15 @@ provider "proxmox" {
   }
 }
 
-# Template name variable - set to the Packer-built template
-locals {
-  ubuntu_template = var.vm_template_name
+# HCP Provider - credentials via HCP_CLIENT_ID, HCP_CLIENT_SECRET env vars
+provider "hcp" {}
+
+# Get latest Ubuntu template from HCP Packer
+data "hcp_packer_artifact" "ubuntu" {
+  bucket_name  = "ubuntu-2404-server"
+  channel_name = "latest"
+  platform     = "proxmox"
+  region       = var.proxmox_node
 }
 
 # Control Plane Node
@@ -37,7 +49,7 @@ module "k8s_control_plane" {
 
   vm_name     = "k8s-cp-01"
   target_node = var.proxmox_node
-  clone       = local.ubuntu_template
+  clone       = data.hcp_packer_artifact.ubuntu.external_identifier
 
   cores  = 4
   memory = 8192
@@ -68,7 +80,7 @@ module "k8s_workers" {
 
   vm_name     = "k8s-wk-${each.key}"
   target_node = var.proxmox_node
-  clone       = local.ubuntu_template
+  clone       = data.hcp_packer_artifact.ubuntu.external_identifier
 
   cores  = 4
   memory = 16384

@@ -1,3 +1,8 @@
+variable "tfc_organization" {
+  description = "Terraform Cloud organization name"
+  type        = string
+}
+
 variable "cluster_ca_certificate" {
   description = "Base64 encoded cluster CA certificate"
   type        = string
