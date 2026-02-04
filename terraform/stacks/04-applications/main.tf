@@ -61,23 +61,7 @@ locals {
   cluster_issuer = data.terraform_remote_state.platform.outputs.cluster_issuer
 }
 
-# HashiCorp Helm Repository
-resource "helm_release" "hashicorp_repo" {
-  name             = "hashicorp"
-  repository       = "https://helm.releases.hashicorp.com"
-  chart            = "consul"
-  namespace        = "flux-system"
-  create_namespace = true
-  version          = "1.0.0"
-
-  # This is a dummy release just to register the repo
-  # Actual Vault deployment is handled below
-  lifecycle {
-    ignore_changes = all
-  }
-}
-
-# Vault Enterprise namespace
+# Vault namespace
 resource "kubernetes_namespace" "vault" {
   metadata {
     name = "vault-system"
@@ -215,7 +199,7 @@ resource "kubernetes_ingress_v1" "vault" {
           path_type = "Prefix"
           backend {
             service {
-              name = "vault-ui"
+              name = "vault"
               port {
                 number = 8200
               }

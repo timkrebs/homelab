@@ -15,8 +15,8 @@ variable "vm_id" {
 }
 
 variable "clone" {
-  type        = string
-  description = "Template VM ID or name to clone from"
+  type        = number
+  description = "Template VM ID to clone from"
 }
 
 variable "cores" {

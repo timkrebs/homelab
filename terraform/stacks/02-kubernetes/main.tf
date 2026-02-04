@@ -41,16 +41,27 @@ resource "ssh_resource" "k3s_control_plane" {
   user        = local.ssh_user
   private_key = var.ssh_private_key
 
-  timeout = "5m"
+  timeout = "10m"
 
   commands = [
-    # Install k3s server
-    "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${local.k3s_version} sh -s - server --cluster-init --disable traefik --disable servicelb --tls-san ${local.control_plane_ip} --tls-san ${var.k3s_external_ip}",
+    # Install k3s server (conditionally add external IP if provided)
+    "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${local.k3s_version} sh -s - server --cluster-init --disable traefik --disable servicelb --tls-san ${local.control_plane_ip}${var.k3s_external_ip != "" ? " --tls-san ${var.k3s_external_ip}" : ""}",
     # Wait for k3s to be ready
-    "until kubectl get nodes; do sleep 5; done",
-    # Get node token for workers
+    "until sudo kubectl get nodes --kubeconfig /etc/rancher/k3s/k3s.yaml 2>/dev/null | grep -q Ready; do sleep 5; done"
+  ]
+}
+
+# Get k3s node token separately for cleaner output parsing
+resource "ssh_resource" "k3s_token" {
+  host        = local.control_plane_ip
+  user        = local.ssh_user
+  private_key = var.ssh_private_key
+
+  commands = [
     "sudo cat /var/lib/rancher/k3s/server/node-token"
   ]
+
+  depends_on = [ssh_resource.k3s_control_plane]
 }
 
 # Install k3s on worker nodes
@@ -61,13 +72,13 @@ resource "ssh_resource" "k3s_workers" {
   user        = local.ssh_user
   private_key = var.ssh_private_key
 
-  timeout = "5m"
+  timeout = "10m"
 
   commands = [
-    "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${local.k3s_version} K3S_URL=https://${local.control_plane_ip}:6443 K3S_TOKEN=${ssh_resource.k3s_control_plane.result} sh -"
+    "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${local.k3s_version} K3S_URL=https://${local.control_plane_ip}:6443 K3S_TOKEN=${trimspace(ssh_resource.k3s_token.result)} sh -"
   ]
 
-  depends_on = [ssh_resource.k3s_control_plane]
+  depends_on = [ssh_resource.k3s_token]
 }
 
 # Retrieve kubeconfig

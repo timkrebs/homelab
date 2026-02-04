@@ -43,13 +43,18 @@ data "hcp_packer_artifact" "ubuntu" {
   region       = var.proxmox_node
 }
 
+locals {
+  # HCP Packer returns the VM ID as a string, convert to number for proxmox provider
+  template_vm_id = tonumber(data.hcp_packer_artifact.ubuntu.external_identifier)
+}
+
 # Control Plane Node
 module "k8s_control_plane" {
   source = "../../modules/proxmox-vm"
 
   vm_name     = "k8s-cp-01"
   target_node = var.proxmox_node
-  clone       = data.hcp_packer_artifact.ubuntu.external_identifier
+  clone       = local.template_vm_id
 
   cores  = 4
   memory = 8192
@@ -80,7 +85,7 @@ module "k8s_workers" {
 
   vm_name     = "k8s-wk-${each.key}"
   target_node = var.proxmox_node
-  clone       = data.hcp_packer_artifact.ubuntu.external_identifier
+  clone       = local.template_vm_id
 
   cores  = 4
   memory = 16384

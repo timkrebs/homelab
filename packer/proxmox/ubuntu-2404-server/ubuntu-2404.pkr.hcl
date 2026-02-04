@@ -25,20 +25,27 @@ source "proxmox-iso" "ubuntu-2404" {
   template_description = "Ubuntu 24.04 Server - Built ${timestamp()}"
 
   # VM OS Settings - Local ISO File
+  # Use ide2 for boot ISO (standard CD-ROM location for SeaBIOS)
   boot_iso {
-    type         = "scsi"
+    type         = "ide"
     iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
     unmount      = true
     iso_checksum = "e240e4b801f7bb68c20d1356b60968ad0c33a41d00d828e74ceb3364a0317be9"
   }
 
   # Cloud-init ISO for autoinstall (more reliable than HTTP for remote Proxmox)
+  # Use ide3 to avoid conflict with boot ISO on ide2
   additional_iso_files {
     cd_files         = ["./http/meta-data", "./http/user-data"]
     cd_label         = "cidata"
     iso_storage_pool = "local"
     unmount          = true
+    device           = "ide3"
   }
+
+  # Boot order: d=CD-ROM first, c=hard disk second
+  # Using legacy format for compatibility
+  boot = "dc"
 
   # VM System Settings
   qemu_agent = true
@@ -70,15 +77,18 @@ source "proxmox-iso" "ubuntu-2404" {
   cloud_init_storage_pool = var.storage_pool
 
   # PACKER Boot Commands
-  # Uses GRUB command line to boot with autoinstall
+  # Wait for GRUB menu, then use command line to boot with autoinstall
   # The cloud-init config is served from the attached ISO with label "cidata"
-  boot_wait         = "5s"
+  boot_wait         = "10s"
   boot_key_interval = "50ms"
   boot_command = [
-    "<esc><wait>",
+    # Wait for GRUB menu to appear, press 'c' to enter command line
     "c<wait5s>",
+    # Load kernel with autoinstall parameter
     "linux /casper/vmlinuz autoinstall ds=nocloud ---<enter><wait5s>",
+    # Load initrd
     "initrd /casper/initrd<enter><wait5s>",
+    # Boot the system
     "boot<enter>"
   ]
 
