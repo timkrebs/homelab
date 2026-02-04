@@ -62,10 +62,10 @@ source "proxmox-iso" "ubuntu-2404" {
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot Configuration - use autoinstall with CD-ROM datasource
+  # Boot Configuration - autoinstall auto-detects CD-ROM with cidata label
   boot_command = [
     "c<wait>",
-    "linux /casper/vmlinuz --- autoinstall ds='nocloud;s=/cidata/'",
+    "linux /casper/vmlinuz --- autoinstall",
     "<enter><wait>",
     "initrd /casper/initrd",
     "<enter><wait>",
