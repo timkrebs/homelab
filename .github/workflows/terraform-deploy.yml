@@ -34,7 +34,7 @@ on:
       - 'terraform/**'
 
 env:
-  TERRAFORM_VERSION: "1.7.0"
+  TERRAFORM_VERSION: "1.13.0"
 
 jobs:
   validate:

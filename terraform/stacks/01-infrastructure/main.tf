@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.13.0"
 
   # Terraform Cloud backend
   # Set TF_CLOUD_ORGANIZATION env var or configure organization below
