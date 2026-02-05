@@ -117,8 +117,8 @@ source "proxmox-iso" "ubuntu-2404" {
 
 # Build Definition to create the VM Template
 build {
-  name    = "ubuntu-server-noble"
-  sources = ["source.proxmox-iso.ubuntu-server-noble"]
+  name    = "ubuntu-2404"
+  sources = ["source.proxmox-iso.ubuntu-2404"]
 
   # Provisioning the VM Template for Cloud-Init Integration in Proxmox #1
   provisioner "shell" {
