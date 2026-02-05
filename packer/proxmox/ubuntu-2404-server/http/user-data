@@ -5,13 +5,11 @@ autoinstall:
   keyboard:
     layout: de
   refresh-installer:
-    update: yes
+    update: no
   network:
     version: 2
     ethernets:
-      id0:
-        match:
-          driver: virtio_net
+      ens18:
         dhcp4: true
         dhcp-identifier: mac
   identity:
@@ -29,11 +27,10 @@ autoinstall:
     - qemu-guest-agent
     - openssh-server
     - sudo
+    - cloud-init
   storage:
     layout:
-      name: direct
-    swap:
-      size: 0
+      name: lvm
   user-data:
     package_upgrade: false
     timezone: Europe/Berlin
@@ -45,8 +42,7 @@ autoinstall:
         sudo: ALL=(ALL) NOPASSWD:ALL
         shell: /bin/bash
   late-commands:
+    # Only enable services - don't try to start them during install
     - curtin in-target --target=/target -- systemctl enable qemu-guest-agent
-    - curtin in-target --target=/target -- systemctl start qemu-guest-agent
     - curtin in-target --target=/target -- systemctl enable ssh
-    - curtin in-target --target=/target -- systemctl start ssh
   shutdown: poweroff
