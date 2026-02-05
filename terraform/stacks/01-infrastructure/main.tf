@@ -5,8 +5,11 @@ terraform {
   # Set TF_CLOUD_ORGANIZATION env var or configure organization below
   # Set TF_API_TOKEN env var for authentication
   cloud {
+    organization = "tim-krebs-org"
+
     workspaces {
-      name = "proxmox-homelab"
+      name    = "proxmox-homelab"
+      project = "proxmox-homelab"
     }
   }
 
@@ -60,9 +63,16 @@ module "k8s_control_plane" {
 }
 
 # Worker Nodes
+locals {
+  worker_ips = {
+    "01" = "192.168.1.121/24"
+    "02" = "192.168.1.122/24"
+  }
+}
+
 module "k8s_workers" {
   source   = "../../modules/proxmox-vm"
-  for_each = toset(["01", "02"])
+  for_each = local.worker_ips
 
   vm_name     = "k8s-wk-${each.key}"
   target_node = var.proxmox_node
@@ -78,7 +88,7 @@ module "k8s_workers" {
 
   network = {
     bridge  = "vmbr0"
-    ip      = "192.168.1.12${each.key}/24"
+    ip      = each.value
     gateway = "192.168.1.1"
   }
 

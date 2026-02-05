@@ -1,10 +1,12 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  # Terraform Cloud backend - organization set via TF_CLOUD_ORGANIZATION env var
   cloud {
+    organization = "tim-krebs-org"
+
     workspaces {
-      name = "homelab-kubernetes"
+      name    = "homelab-kubernetes"
+      project = "proxmox-homelab"
     }
   }
 
@@ -21,9 +23,9 @@ data "terraform_remote_state" "infrastructure" {
   backend = "remote"
 
   config = {
-    organization = var.tfc_organization
+    organization = "tim-krebs-org"
     workspaces = {
-      name = "homelab-infrastructure"
+      name = "proxmox-homelab"
     }
   }
 }

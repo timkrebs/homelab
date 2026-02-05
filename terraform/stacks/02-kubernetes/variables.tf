@@ -1,8 +1,3 @@
-variable "tfc_organization" {
-  description = "Terraform Cloud organization name"
-  type        = string
-}
-
 variable "ssh_private_key" {
   description = "SSH private key for connecting to nodes"
   type        = string
