@@ -10,6 +10,10 @@ packer {
   }
 }
 
+locals {
+  disk_storage = var.storage_pool
+}
+
 # Resource Definition for the VM Template
 source "proxmox-iso" "ubuntu-2404" {
   # Proxmox Connection Settings

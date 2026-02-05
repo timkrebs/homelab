@@ -38,6 +38,12 @@ variable "storage_pool" {
   description = "Storage pool for VM disk"
 }
 
+variable "ssh_username" {
+  type        = string
+  default     = "packer"
+  description = "SSH username for packer user during build (must match user-data)"
+}
+
 variable "ssh_password" {
   type        = string
   sensitive   = true
