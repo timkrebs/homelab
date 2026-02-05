@@ -19,15 +19,15 @@ source "proxmox-iso" "ubuntu-2404" {
   insecure_skip_tls_verify = var.proxmox_skip_tls_verify
 
   # VM General Settings
-  node                 = var.proxmox_node
-  vm_id                = var.vm_id
+  node                 = "${var.proxmox_node}"
+  vm_id                = "${var.vm_id}"
   vm_name              = "ubuntu-2404-template"
   template_description = "Ubuntu 24.04 Server - Built ${timestamp()}"
 
   # VM OS Settings - Local ISO File
   # Use ide2 for boot ISO (standard CD-ROM location for SeaBIOS)
   boot_iso {
-    type         = "ide"
+    type         = "scsi"
     iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
     unmount      = true
     iso_checksum = "e240e4b801f7bb68c20d1356b60968ad0c33a41d00d828e74ceb3364a0317be9"
@@ -35,93 +35,92 @@ source "proxmox-iso" "ubuntu-2404" {
 
   # Cloud-init ISO for autoinstall (more reliable than HTTP for remote Proxmox)
   # Use ide3 to avoid conflict with boot ISO on ide2
-  additional_iso_files {
-    cd_files         = ["./http/meta-data", "./http/user-data"]
-    cd_label         = "cidata"
-    iso_storage_pool = "local"
-    unmount          = true
-    device           = "ide3"
-  }
+  #additional_iso_files {
+  #  cd_files         = ["./http/meta-data", "./http/user-data"]
+  #  cd_label         = "cidata"
+  #  iso_storage_pool = "local"
+  #  unmount          = true
+  #  device           = "ide3"
+  #}
 
   # Boot order: d=CD-ROM first, c=hard disk second
   # Using legacy format for compatibility
-  boot = "dc"
+  #boot = "dc"
 
   # VM System Settings
   qemu_agent = true
 
+
   # VM Hard Disk Settings
   scsi_controller = "virtio-scsi-pci"
+
   disks {
     disk_size    = "25G"
-    storage_pool = var.storage_pool
+    storage_pool = "${local.disk_storage}"
     type         = "virtio"
   }
 
   # VM CPU Settings
-  cores = 2
+  cores = "2"
 
   # VM Memory Settings
-  memory = 2048
-  os     = "l26"
+  memory = "2048"
+  # VM OS Settings
+  os = "l26"
 
   # VM Network Settings
   network_adapters {
     model    = "virtio"
     bridge   = "vmbr0"
-    firewall = false
+    firewall = "false"
   }
 
   # VM Cloud-Init Settings
   cloud_init              = true
-  cloud_init_storage_pool = var.storage_pool
+  cloud_init_storage_pool = "${local.disk_storage}"
 
   # PACKER Boot Commands
-  # Wait for GRUB menu, then use command line to boot with autoinstall
-  # The cloud-init config is served from the attached ISO with label "cidata"
-  boot_wait         = "10s"
-  boot_key_interval = "50ms"
+  boot      = "c"
+  boot_wait = "10s"
+  #communicator = "ssh"
   boot_command = [
-    # Wait for GRUB menu to appear, press 'c' to enter command line
-    "c<wait5s>",
-    # Load kernel with autoinstall parameter
-    "linux /casper/vmlinuz autoinstall ds=nocloud ---<enter><wait5s>",
-    # Load initrd
-    "initrd /casper/initrd<enter><wait5s>",
-    # Boot the system
-    "boot<enter>"
+    "<esc><wait>",
+    "e<wait>",
+    "<down><down><down><end>",
+    "<bs><bs><bs><bs><wait>",
+    "autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<wait>",
+    "<f10><wait>"
   ]
+  # Useful for debugging
+  # Sometimes lag will require this
+  boot_key_interval = "500ms"
 
-  # SSH Settings
-  ssh_username = "packer"
-  ssh_password = var.ssh_password
-  ssh_timeout  = "30m"
-  ssh_pty      = true
+
+  # PACKER Autoinstall Settings
+  http_directory = "http"
+
+  # (Optional) Bind IP Address and Port
+  # http_bind_address       = "0.0.0.0"
+  # http_port_min           = 8802
+  # http_port_max           = 8802
+
+  ssh_username = "${var.ssh_username}"
+  ssh_password = "${var.ssh_password}"
+  # - or -
+  # (Option 2) Add your Private SSH KEY file here
+  # ssh_private_key_file    = "~/.ssh/id_rsa"
+
+  # Raise the timeout, when installation takes longer
+  ssh_timeout = "30m"
+  ssh_pty     = true
 }
 
 # Build Definition to create the VM Template
 build {
-  name    = "ubuntu-2404"
-  sources = ["source.proxmox-iso.ubuntu-2404"]
+  name    = "ubuntu-server-noble"
+  sources = ["source.proxmox-iso.ubuntu-server-noble"]
 
-  # HCP Packer Registry - credentials via HCP_CLIENT_ID, HCP_CLIENT_SECRET, HCP_PROJECT_ID env vars
-  hcp_packer_registry {
-    bucket_name = "ubuntu-2404-server"
-    description = "Ubuntu 24.04 LTS Server for Kubernetes nodes"
-
-    bucket_labels = {
-      "os"      = "ubuntu"
-      "version" = "24.04"
-      "purpose" = "kubernetes"
-    }
-
-    build_labels = {
-      "build-time"   = timestamp()
-      "build-source" = basename(path.cwd)
-    }
-  }
-
-  # Provisioning the VM Template for Cloud-Init Integration in Proxmox
+  # Provisioning the VM Template for Cloud-Init Integration in Proxmox #1
   provisioner "shell" {
     inline = [
       "while [ ! -f /var/lib/cloud/instance/boot-finished ]; do echo 'Waiting for cloud-init...'; sleep 1; done",
@@ -131,28 +130,27 @@ build {
       "sudo apt -y clean",
       "sudo apt -y autoclean",
       "sudo cloud-init clean",
+      # WICHTIG: Alle Netplan und Cloud-Init Netzwerk-Configs komplett löschen
       "sudo rm -f /etc/cloud/cloud.cfg.d/subiquity-disable-cloudinit-networking.cfg",
+      "sudo rm -f /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg",
       "sudo rm -f /etc/netplan/*.yaml",
       "sudo sync"
     ]
   }
 
-  # Add cloud-init configuration for Proxmox
+
+  # Provisioning the VM Template for Cloud-Init Integration in Proxmox #2
   provisioner "file" {
     source      = "files/99-pve.cfg"
     destination = "/tmp/99-pve.cfg"
   }
 
+  # Provisioning the VM Template for Cloud-Init Integration in Proxmox #3
   provisioner "shell" {
-    inline = ["sudo cp /tmp/99-pve.cfg /etc/cloud/cloud.cfg.d/99-pve.cfg"]
-  }
-
-  # Run additional setup scripts
-  provisioner "shell" {
-    scripts = [
-      "scripts/setup.sh",
-      "scripts/k8s-prereqs.sh",
-      "scripts/cleanup.sh"
+    inline = [
+      "sudo cp /tmp/99-pve.cfg /etc/cloud/cloud.cfg.d/99-pve.cfg",
+      "sudo apt-get update",
+      "sudo apt-get upgrade -y",
     ]
   }
 }
