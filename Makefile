@@ -1,4 +1,9 @@
-.PHONY: help init validate plan apply packer-validate packer-build lint clean pre-commit pre-commit-install pre-commit-update pre-commit-check flux-bootstrap k8s-validate
+.PHONY: help init validate plan apply packer-validate packer-build packer-remote-build packer-remote-setup lint clean pre-commit pre-commit-install pre-commit-update pre-commit-check flux-bootstrap k8s-validate
+
+# Configuration - override with environment variables or make arguments
+PROXMOX_HOST ?= root@192.168.1.128
+PROXMOX_PACKER_DIR ?= /root/packer
+TEMPLATE ?= ubuntu-2404-server
 
 # Default target
 help:
@@ -11,8 +16,11 @@ help:
 	@echo "    apply             - Apply all stacks (requires confirmation)"
 	@echo ""
 	@echo "  Packer:"
-	@echo "    packer-validate   - Validate Packer templates"
-	@echo "    packer-build      - Build VM images"
+	@echo "    packer-validate   - Validate Packer templates locally"
+	@echo "    packer-remote-setup - Setup Packer on Proxmox host (one-time)"
+	@echo "    packer-remote-build - Build image on Proxmox host (recommended)"
+	@echo "                          TEMPLATE=ubuntu-2404-server (default)"
+	@echo "                          PROXMOX_HOST=root@192.168.1.128 (default)"
 	@echo ""
 	@echo "  Development:"
 	@echo "    lint              - Run all linters"
@@ -62,14 +70,53 @@ apply:
 packer-validate:
 	@echo "Validating Packer templates..."
 	@for template in packer/proxmox/*/; do \
-		echo ">>> Validating $$template"; \
-		packer init $$template && packer validate $$template; \
+		if [ -f "$$template"/*.pkr.hcl ]; then \
+			echo ">>> Validating $$template"; \
+			packer init "$$template" && packer validate -syntax-only "$$template"; \
+		fi \
 	done
 
 packer-build:
-	@echo "Building Packer images..."
-	@read -p "Which template? [ubuntu-2404-server/debian-12]: " template && \
-	cd packer/proxmox/$$template && packer build .
+	@echo "Building Packer images locally..."
+	@echo "WARNING: This requires network access to Proxmox. Use 'make packer-remote-build' instead."
+	@read -p "Which template? [ubuntu-2404-server]: " template && \
+	template=$${template:-ubuntu-2404-server} && \
+	cd packer/proxmox/$$template && packer init . && packer build -var-file=secrets.pkrvars.hcl .
+
+# Remote Packer build - runs directly on Proxmox host
+packer-remote-setup:
+	@echo "Setting up Packer on Proxmox host $(PROXMOX_HOST)..."
+	ssh $(PROXMOX_HOST) 'mkdir -p $(PROXMOX_PACKER_DIR)'
+	@echo "Installing Packer on Proxmox..."
+	ssh $(PROXMOX_HOST) 'command -v packer || (apt-get update && apt-get install -y gnupg software-properties-common && \
+		curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg && \
+		echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com bookworm main" > /etc/apt/sources.list.d/hashicorp.list && \
+		apt-get update && apt-get install -y packer xorriso)'
+	@echo "Setup complete! Now run: make packer-remote-build"
+
+packer-remote-build:
+	@echo "Building $(TEMPLATE) on Proxmox host $(PROXMOX_HOST)..."
+	@echo ""
+	@echo "Step 1: Syncing Packer files to Proxmox..."
+	rsync -avz --delete \
+		packer/proxmox/$(TEMPLATE)/ \
+		$(PROXMOX_HOST):$(PROXMOX_PACKER_DIR)/$(TEMPLATE)/
+	@echo ""
+	@echo "Step 2: Running Packer build on Proxmox..."
+	ssh -t $(PROXMOX_HOST) 'cd $(PROXMOX_PACKER_DIR)/$(TEMPLATE) && \
+		TOKEN=$$(grep "root@pam!packer" /etc/pve/priv/token.cfg 2>/dev/null | cut -d" " -f2) && \
+		if [ -z "$$TOKEN" ]; then \
+			echo "Creating API token..."; \
+			pveum user token add root@pam packer --privsep=0 2>/dev/null || true; \
+			TOKEN=$$(grep "root@pam!packer" /etc/pve/priv/token.cfg | cut -d" " -f2); \
+		fi && \
+		echo "Using token: root@pam!packer" && \
+		packer init . && \
+		PACKER_LOG=1 packer build -force \
+			-var "proxmox_api_token_secret=$$TOKEN" \
+			.'
+	@echo ""
+	@echo "Build complete! Template should now be available in Proxmox."
 
 # Development targets
 lint:

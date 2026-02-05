@@ -31,7 +31,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
   disk {
     datastore_id = var.disk.storage
     size         = var.disk.size
-    interface    = "scsi0"
+    interface    = "virtio0"
   }
 
   network_device {

@@ -1,11 +1,12 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  # Terraform Cloud backend - organization set via TF_CLOUD_ORGANIZATION env var
-  # Token set via TF_API_TOKEN env var
+  # Terraform Cloud backend
+  # Set TF_CLOUD_ORGANIZATION env var or configure organization below
+  # Set TF_API_TOKEN env var for authentication
   cloud {
     workspaces {
-      name = "homelab-infrastructure"
+      name = "proxmox-homelab"
     }
   }
 
@@ -13,10 +14,6 @@ terraform {
     proxmox = {
       source  = "bpg/proxmox"
       version = "~> 0.50"
-    }
-    hcp = {
-      source  = "hashicorp/hcp"
-      version = "~> 0.80"
     }
   }
 }
@@ -32,29 +29,13 @@ provider "proxmox" {
   }
 }
 
-# HCP Provider - credentials via HCP_CLIENT_ID, HCP_CLIENT_SECRET env vars
-provider "hcp" {}
-
-# Get latest Ubuntu template from HCP Packer
-data "hcp_packer_artifact" "ubuntu" {
-  bucket_name  = "ubuntu-2404-server"
-  channel_name = "latest"
-  platform     = "proxmox"
-  region       = var.proxmox_node
-}
-
-locals {
-  # HCP Packer returns the VM ID as a string, convert to number for proxmox provider
-  template_vm_id = tonumber(data.hcp_packer_artifact.ubuntu.external_identifier)
-}
-
 # Control Plane Node
 module "k8s_control_plane" {
   source = "../../modules/proxmox-vm"
 
   vm_name     = "k8s-cp-01"
   target_node = var.proxmox_node
-  clone       = local.template_vm_id
+  clone       = var.template_vm_id
 
   cores  = 4
   memory = 8192
@@ -66,12 +47,12 @@ module "k8s_control_plane" {
 
   network = {
     bridge  = "vmbr0"
-    ip      = "10.10.1.10/24"
-    gateway = "10.10.0.1"
+    ip      = "192.168.1.110/24"
+    gateway = "192.168.1.1"
   }
 
   cloud_init = {
-    user     = "ubuntu"
+    user     = var.vm_user
     ssh_keys = [var.ssh_public_key]
   }
 
@@ -85,7 +66,7 @@ module "k8s_workers" {
 
   vm_name     = "k8s-wk-${each.key}"
   target_node = var.proxmox_node
-  clone       = local.template_vm_id
+  clone       = var.template_vm_id
 
   cores  = 4
   memory = 16384
@@ -97,12 +78,12 @@ module "k8s_workers" {
 
   network = {
     bridge  = "vmbr0"
-    ip      = "10.10.1.2${each.key}/24"
-    gateway = "10.10.0.1"
+    ip      = "192.168.1.12${each.key}/24"
+    gateway = "192.168.1.1"
   }
 
   cloud_init = {
-    user     = "ubuntu"
+    user     = var.vm_user
     ssh_keys = [var.ssh_public_key]
   }
 

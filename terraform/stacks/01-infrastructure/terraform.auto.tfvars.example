@@ -1,0 +1,12 @@
+# Copy this file to terraform.auto.tfvars and fill in your values
+# Or set these as TFC workspace variables
+
+proxmox_api_url          = "https://192.168.1.128:8006"
+proxmox_api_token_id     = "root@pam!terraform"
+proxmox_api_token_secret = "your-token-secret-here"  # sensitive - set in TFC
+proxmox_insecure         = true
+proxmox_node             = "pve01"
+template_vm_id           = 9000
+storage_pool             = "local-lvm"
+vm_user                  = "ubuntu"
+ssh_public_key           = "ssh-ed25519 AAAA... your-key"  # sensitive - set in TFC

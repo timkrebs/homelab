@@ -4,19 +4,6 @@ autoinstall:
   locale: en_US
   keyboard:
     layout: de
-  refresh-installer:
-    update: no
-  network:
-    version: 2
-    ethernets:
-      ens18:
-        dhcp4: true
-        dhcp-identifier: mac
-  identity:
-    hostname: ubuntu-template
-    username: packer
-    # Password: packer (SHA-512 hash)
-    password: "$6$packersa$p46UIkeTFQ4qHIRxrmU155wruG49wsi8K8Paw0bjOKQSeqhnMSpmeqWAy8UPZJHmHzYf2c0utbc4lQaQzlhek0"
   ssh:
     install-server: true
     allow-pw: true
@@ -27,10 +14,11 @@ autoinstall:
     - qemu-guest-agent
     - openssh-server
     - sudo
-    - cloud-init
   storage:
     layout:
-      name: lvm
+      name: direct
+    swap:
+      size: 0
   user-data:
     package_upgrade: false
     timezone: Europe/Berlin
@@ -42,7 +30,8 @@ autoinstall:
         sudo: ALL=(ALL) NOPASSWD:ALL
         shell: /bin/bash
   late-commands:
-    # Only enable services - don't try to start them during install
     - curtin in-target --target=/target -- systemctl enable qemu-guest-agent
+    - curtin in-target --target=/target -- systemctl start qemu-guest-agent
     - curtin in-target --target=/target -- systemctl enable ssh
+    - curtin in-target --target=/target -- systemctl start ssh
   shutdown: poweroff

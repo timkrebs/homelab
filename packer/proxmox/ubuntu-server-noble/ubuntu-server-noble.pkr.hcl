@@ -1,55 +1,73 @@
-# Ubuntu 24.04 Server Template for Proxmox
-# Based on working ubuntu-server-noble configuration
+# Ubuntu Server Noble (24.04.x)
+# ---
+# Packer Template to create an Ubuntu Server (Noble 24.04.x) on Proxmox
 
-packer {
-  required_plugins {
-    proxmox = {
-      source  = "github.com/hashicorp/proxmox"
-      version = ">= 1.2.0"
-    }
-  }
+# Variable Definitions
+variable "proxmox_api_url" {
+  type = string
+}
+
+variable "proxmox_api_token_id" {
+  type = string
+}
+
+variable "proxmox_api_token_secret" {
+  type      = string
+  sensitive = true
+}
+
+variable "proxmox_node" {
+  type = string
+}
+
+variable "ssh_username" {
+  type = string
+}
+
+variable "ssh_password" {
+  type      = string
+  sensitive = true
 }
 
 locals {
-  disk_storage = var.storage_pool
+  disk_storage = "local-lvm"
 }
 
-# Resource Definition for the VM Template
-source "proxmox-iso" "ubuntu-2404" {
+# Resource Definiation for the VM Template
+source "proxmox-iso" "ubuntu-server-noble" {
+
   # Proxmox Connection Settings
-  proxmox_url              = var.proxmox_api_url
-  username                 = var.proxmox_api_token_id
-  token                    = var.proxmox_api_token_secret
-  insecure_skip_tls_verify = var.proxmox_skip_tls_verify
+  proxmox_url = "${var.proxmox_api_url}"
+  username    = "${var.proxmox_api_token_id}"
+  token       = "${var.proxmox_api_token_secret}"
+  # (Optional) Skip TLS Verification
+  # insecure_skip_tls_verify = true
 
   # VM General Settings
   node                 = "${var.proxmox_node}"
-  vm_id                = "${var.vm_id}"
-  vm_name              = "ubuntu-2404-template"
-  template_description = "Ubuntu 24.04 Server - Built ${timestamp()}"
+  vm_id                = "900"
+  vm_name              = "ubuntu-server-noble"
+  template_description = "Ubuntu Server Noble Image"
 
-  # VM OS Settings - Local ISO File
-  # Use IDE for boot ISO (required for SeaBIOS - SCSI CD-ROM causes boot failures)
+  # VM OS Settings
+  # (Option 1) Local ISO File
   boot_iso {
-    type         = "ide"
+    type         = "scsi"
     iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
     unmount      = true
     iso_checksum = "e240e4b801f7bb68c20d1356b60968ad0c33a41d00d828e74ceb3364a0317be9"
   }
-
-  # Cloud-init ISO for autoinstall (more reliable than HTTP for remote Proxmox)
-  # Use ide3 to avoid conflict with boot ISO on ide2
-  #additional_iso_files {
-  #  cd_files         = ["./http/meta-data", "./http/user-data"]
-  #  cd_label         = "cidata"
-  #  iso_storage_pool = "local"
-  #  unmount          = true
-  #  device           = "ide3"
+  # (Option 2) Download ISO
+  #boot_iso {
+  #    type             = "scsi"
+  #    iso_url          = "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
+  #    unmount          = true
+  #    iso_storage_pool = "local"
+  #    iso_checksum     = "file:https://releases.ubuntu.com/24.04/SHA256SUMS"
   #}
 
   # VM System Settings
   qemu_agent = true
-
 
   # VM Hard Disk Settings
   scsi_controller = "virtio-scsi-pci"
@@ -65,8 +83,6 @@ source "proxmox-iso" "ubuntu-2404" {
 
   # VM Memory Settings
   memory = "2048"
-  # VM OS Settings
-  os = "l26"
 
   # VM Network Settings
   network_adapters {
@@ -80,9 +96,8 @@ source "proxmox-iso" "ubuntu-2404" {
   cloud_init_storage_pool = "${local.disk_storage}"
 
   # PACKER Boot Commands
-  # Boot order: d=CD-ROM first (for ISO install), c=hard disk second (after install)
-  boot      = "dc"
-  boot_wait = "15s"
+  boot      = "c"
+  boot_wait = "10s"
   #communicator = "ssh"
   boot_command = [
     "<esc><wait>",
@@ -113,13 +128,13 @@ source "proxmox-iso" "ubuntu-2404" {
 
   # Raise the timeout, when installation takes longer
   ssh_timeout = "30m"
-  ssh_pty     = true
 }
 
 # Build Definition to create the VM Template
 build {
-  name    = "ubuntu-2404"
-  sources = ["source.proxmox-iso.ubuntu-2404"]
+
+  name    = "ubuntu-server-noble"
+  sources = ["source.proxmox-iso.ubuntu-server-noble"]
 
   # Provisioning the VM Template for Cloud-Init Integration in Proxmox #1
   provisioner "shell" {
@@ -131,14 +146,11 @@ build {
       "sudo apt -y clean",
       "sudo apt -y autoclean",
       "sudo cloud-init clean",
-      # WICHTIG: Alle Netplan und Cloud-Init Netzwerk-Configs komplett löschen
       "sudo rm -f /etc/cloud/cloud.cfg.d/subiquity-disable-cloudinit-networking.cfg",
-      "sudo rm -f /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg",
-      "sudo rm -f /etc/netplan/*.yaml",
+      "sudo rm -f /etc/netplan/00-installer-config.yaml",
       "sudo sync"
     ]
   }
-
 
   # Provisioning the VM Template for Cloud-Init Integration in Proxmox #2
   provisioner "file" {
@@ -148,10 +160,10 @@ build {
 
   # Provisioning the VM Template for Cloud-Init Integration in Proxmox #3
   provisioner "shell" {
-    inline = [
-      "sudo cp /tmp/99-pve.cfg /etc/cloud/cloud.cfg.d/99-pve.cfg",
-      "sudo apt-get update",
-      "sudo apt-get upgrade -y",
-    ]
+    inline = ["sudo cp /tmp/99-pve.cfg /etc/cloud/cloud.cfg.d/99-pve.cfg"]
   }
+
+
+  # Add additional provisioning scripts here
+  # ...
 }
