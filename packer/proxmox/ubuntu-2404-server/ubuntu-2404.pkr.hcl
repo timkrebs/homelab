@@ -29,9 +29,9 @@ source "proxmox-iso" "ubuntu-2404" {
   template_description = "Ubuntu 24.04 Server - Built ${timestamp()}"
 
   # VM OS Settings - Local ISO File
-  # Use ide2 for boot ISO (standard CD-ROM location for SeaBIOS)
+  # Use IDE for boot ISO (required for SeaBIOS - SCSI CD-ROM causes boot failures)
   boot_iso {
-    type         = "scsi"
+    type         = "ide"
     iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
     unmount      = true
     iso_checksum = "e240e4b801f7bb68c20d1356b60968ad0c33a41d00d828e74ceb3364a0317be9"
@@ -46,10 +46,6 @@ source "proxmox-iso" "ubuntu-2404" {
   #  unmount          = true
   #  device           = "ide3"
   #}
-
-  # Boot order: d=CD-ROM first, c=hard disk second
-  # Using legacy format for compatibility
-  #boot = "dc"
 
   # VM System Settings
   qemu_agent = true
@@ -84,8 +80,9 @@ source "proxmox-iso" "ubuntu-2404" {
   cloud_init_storage_pool = "${local.disk_storage}"
 
   # PACKER Boot Commands
-  boot      = "c"
-  boot_wait = "10s"
+  # Boot order: d=CD-ROM first (for ISO install), c=hard disk second (after install)
+  boot      = "dc"
+  boot_wait = "15s"
   #communicator = "ssh"
   boot_command = [
     "<esc><wait>",
