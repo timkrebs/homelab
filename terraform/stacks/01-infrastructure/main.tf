@@ -5,7 +5,6 @@ terraform {
   # Set TF_CLOUD_ORGANIZATION env var or configure organization below
   # Set TF_API_TOKEN env var for authentication
   cloud {
-
     organization = "tim-krebs-org"
 
     workspaces {
