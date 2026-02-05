@@ -16,6 +16,9 @@ terraform.rc
 # Packer
 packer_cache/
 *.box
+*.pkrvars.hcl
+!*.pkrvars.hcl.example
+packer_manifest.json
 
 # Kubernetes
 kubeconfig

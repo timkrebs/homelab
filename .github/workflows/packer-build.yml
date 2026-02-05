@@ -1,12 +1,28 @@
-name: Packer Build
+name: Packer Build and Deploy
 
-# NOTE: The build job requires a self-hosted runner with network access to both:
-# 1. Proxmox API (for VM creation)
-# 2. The VM's private IP (for SSH provisioning)
+# Automated Packer build workflow for Proxmox templates
+# Inspired by: https://developer.hashicorp.com/packer/tutorials/cloud-production/github-actions
+#
+# IMPORTANT: The build job requires a self-hosted runner with network access to:
+# 1. Proxmox API (for VM creation/management)
+# 2. VM private IPs (for SSH provisioning during image creation)
+#
 # GitHub-hosted runners CANNOT reach private homelab networks.
-# Set up a self-hosted runner with the 'proxmox' label, or run Packer locally.
+# Options:
+# - Set up a self-hosted runner with the 'proxmox' label in your homelab
+# - Run Packer locally using: ./packer/proxmox/ubuntu-2404-server/build.sh
 
 on:
+  push:
+    tags: ["v[0-9].[0-9]+.[0-9]+"]
+    branches:
+      - main
+      - development
+    paths:
+      - 'packer/**'
+  pull_request:
+    paths:
+      - 'packer/**'
   workflow_dispatch:
     inputs:
       template:
@@ -21,16 +37,10 @@ on:
         required: true
         type: boolean
         default: false
-  push:
-    branches: [main]
-    paths:
-      - 'packer/**'
-  pull_request:
-    paths:
-      - 'packer/**'
 
 env:
-  PACKER_VERSION: "1.10.0"
+  PACKER_VERSION: "1.12.0"
+  TEMPLATE_DIR: "packer/proxmox/ubuntu-2404-server"
 
 jobs:
   validate:
@@ -50,17 +60,19 @@ jobs:
 
       - name: Packer Init
         run: packer init .
-        working-directory: packer/proxmox/ubuntu-2404-server
+        working-directory: ${{ env.TEMPLATE_DIR }}
 
       - name: Packer Validate (syntax only)
         run: packer validate -syntax-only .
-        working-directory: packer/proxmox/ubuntu-2404-server
+        working-directory: ${{ env.TEMPLATE_DIR }}
 
       - name: Summary
         if: always()
         run: |
           echo "## Packer Validation Summary" >> $GITHUB_STEP_SUMMARY
           echo "- Template: ubuntu-2404-server" >> $GITHUB_STEP_SUMMARY
+          echo "- Triggered by: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch/Tag: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Build Requirements" >> $GITHUB_STEP_SUMMARY
@@ -69,24 +81,21 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Options:**" >> $GITHUB_STEP_SUMMARY
           echo "1. Set up a self-hosted runner with 'proxmox' label in your homelab" >> $GITHUB_STEP_SUMMARY
-          echo "2. Run Packer locally from a machine with network access" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Local Build:**" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo 'cd packer/proxmox/ubuntu-2404-server' >> $GITHUB_STEP_SUMMARY
-          echo 'packer init . && packer build -var-file=secrets.pkrvars.hcl .' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "2. Run Packer locally: \`./packer/proxmox/ubuntu-2404-server/build.sh\`" >> $GITHUB_STEP_SUMMARY
 
-  # IMPORTANT: This job requires a self-hosted runner with network access to:
-  # - Proxmox API (for VM creation/management)
-  # - VM private IPs (for SSH provisioning)
-  # GitHub-hosted runners CANNOT reach private homelab networks.
+  # Build job - requires self-hosted runner with homelab network access
   build:
-    name: Build Packer Image (Self-Hosted)
+    name: Build Packer Image
     runs-on: proxmox
     needs: validate
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_build == 'true'
+    # Run on: manual trigger with build enabled, OR push to main/development, OR tags
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_build == 'true') ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development' || startsWith(github.ref, 'refs/tags/v')))
     environment: production
+    outputs:
+      build_fingerprint: ${{ steps.manifest.outputs.fingerprint }}
+      build_timestamp: ${{ steps.manifest.outputs.timestamp }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,9 +103,9 @@ jobs:
       - name: Install required tools
         run: |
           if command -v apt-get &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y xorriso unzip zip curl wget
+            sudo apt-get update && sudo apt-get install -y xorriso unzip zip curl wget jq
           elif command -v brew &> /dev/null; then
-            brew install xorriso unzip || true
+            brew install xorriso jq || true
           fi
 
       - name: Setup Packer
@@ -106,29 +115,26 @@ jobs:
 
       - name: Packer Init
         run: packer init .
-        working-directory: packer/proxmox/${{ github.event.inputs.template }}
+        working-directory: ${{ env.TEMPLATE_DIR }}
 
       - name: Pre-flight Network Diagnostics
         run: |
           echo "=== Self-hosted Runner Network Info ==="
           echo "Hostname: $(hostname)"
           echo "IP addresses:"
-          ip -4 addr show | grep -E 'inet ' || hostname -I
+          ip -4 addr show 2>/dev/null | grep -E 'inet ' || hostname -I 2>/dev/null || ifconfig | grep 'inet '
           echo ""
           echo "=== Testing Proxmox API connectivity ==="
-          # Extract host from URL
           PROXMOX_HOST=$(echo "${{ secrets.PROXMOX_API_URL }}" | sed 's|https\?://||' | cut -d':' -f1 | cut -d'/' -f1)
           echo "Proxmox host: $PROXMOX_HOST"
           if ping -c 1 -W 5 "$PROXMOX_HOST" > /dev/null 2>&1; then
             echo "✓ Proxmox host is reachable"
           else
-            echo "✗ WARNING: Cannot ping Proxmox host (may be blocked by firewall)"
+            echo "⚠ WARNING: Cannot ping Proxmox host (may be blocked by firewall)"
           fi
-          echo ""
-          echo "=== Firewall Status ==="
-          sudo iptables -L INPUT -n 2>/dev/null | head -20 || echo "Cannot check iptables"
 
-      - name: Packer Build
+      - name: Packer Build - Branches
+        if: startsWith(github.ref, 'refs/heads/')
         run: |
           packer build -force \
             -var "proxmox_api_url=${{ secrets.PROXMOX_API_URL }}" \
@@ -136,17 +142,72 @@ jobs:
             -var "proxmox_api_token_secret=${{ secrets.PROXMOX_API_TOKEN_SECRET }}" \
             -var "ssh_password=${{ secrets.PACKER_SSH_PASSWORD }}" \
             .
-        working-directory: packer/proxmox/${{ github.event.inputs.template }}
+        working-directory: ${{ env.TEMPLATE_DIR }}
         env:
-          HCP_CLIENT_ID: ${{ secrets.HCP_CLIENT_ID }}
-          HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
-          HCP_PROJECT_ID: ${{ secrets.HCP_PROJECT_ID }}
           PACKER_LOG: 1
 
-      - name: Summary
+      - name: Packer Build - Tags
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # Use timestamp as fingerprint for tagged builds to ensure uniqueness
+          export BUILD_FINGERPRINT=$(date +'%m%d%YT%H%M%S')
+          echo "Build fingerprint: $BUILD_FINGERPRINT"
+          packer build -force \
+            -var "proxmox_api_url=${{ secrets.PROXMOX_API_URL }}" \
+            -var "proxmox_api_token_id=${{ secrets.PROXMOX_API_TOKEN_ID }}" \
+            -var "proxmox_api_token_secret=${{ secrets.PROXMOX_API_TOKEN_SECRET }}" \
+            -var "ssh_password=${{ secrets.PACKER_SSH_PASSWORD }}" \
+            .
+        working-directory: ${{ env.TEMPLATE_DIR }}
+        env:
+          PACKER_LOG: 1
+
+      - name: Generate Build Manifest
+        id: manifest
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          FINGERPRINT="${{ github.sha }}"
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            FINGERPRINT=$(date +'%m%d%YT%H%M%S')
+          fi
+
+          # Create manifest file
+          cat > packer_manifest.json << EOF
+          {
+            "build_timestamp": "$TIMESTAMP",
+            "git_sha": "${{ github.sha }}",
+            "git_ref": "${{ github.ref_name }}",
+            "fingerprint": "$FINGERPRINT",
+            "template": "ubuntu-2404-server",
+            "proxmox_node": "${{ secrets.PROXMOX_NODE || 'pve01' }}"
+          }
+          EOF
+
+          echo "fingerprint=$FINGERPRINT" >> $GITHUB_OUTPUT
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+
+          cat packer_manifest.json
+        working-directory: ${{ env.TEMPLATE_DIR }}
+
+      - name: Upload Build Manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: packer-manifest-${{ github.sha }}
+          path: ${{ env.TEMPLATE_DIR }}/packer_manifest.json
+          retention-days: 90
+
+      - name: Build Summary
         if: always()
         run: |
           echo "## Packer Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Template: ${{ github.event.inputs.template }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Template: ubuntu-2404-server" >> $GITHUB_STEP_SUMMARY
+          echo "- Trigger: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch/Tag: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- HCP Packer Registry: Enabled" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Build Details" >> $GITHUB_STEP_SUMMARY
+            echo "- Fingerprint: \`${{ steps.manifest.outputs.fingerprint }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- Timestamp: ${{ steps.manifest.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          fi
