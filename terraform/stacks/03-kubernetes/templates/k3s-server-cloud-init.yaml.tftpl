@@ -1,0 +1,125 @@
+#cloud-config
+# K3s Server (Control Plane): k8s-control-01
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - jq
+  - open-iscsi
+  - nfs-common
+  - apparmor
+  - apparmor-utils
+
+write_files:
+  # Vault-issued TLS certificate for K3s API server
+  - path: /var/lib/rancher/k3s/server/tls/vault-serving.pem
+    permissions: '0644'
+    owner: root:root
+    content: |
+      ${indent(6, tls_cert)}
+
+  # Vault-issued TLS private key
+  - path: /var/lib/rancher/k3s/server/tls/vault-serving-key.pem
+    permissions: '0600'
+    owner: root:root
+    content: |
+      ${indent(6, tls_key)}
+
+  # Vault CA certificate chain (Root CA + Intermediate CA)
+  - path: /var/lib/rancher/k3s/server/tls/vault-ca.pem
+    permissions: '0644'
+    owner: root:root
+    content: |
+      ${indent(6, tls_ca_chain)}
+
+  # Vault CA for system trust (cert-manager, workloads)
+  - path: /usr/local/share/ca-certificates/vault-ca.crt
+    permissions: '0644'
+    owner: root:root
+    content: |
+      ${indent(6, tls_ca_chain)}
+
+  # K3s config file
+  - path: /etc/rancher/k3s/config.yaml
+    permissions: '0644'
+    owner: root:root
+    content: |
+      node-name: "k8s-control-01"
+      token: "${k3s_token}"
+      tls-san:
+        - "${node_ip}"
+        - "k8s-control-01"
+        - "k8s-control-01.${domain}"
+        - "kubernetes"
+        - "kubernetes.default"
+        - "kubernetes.default.svc"
+        - "kubernetes.default.svc.cluster.local"
+        - "10.43.0.1"
+      cluster-cidr: "${cluster_cidr}"
+      service-cidr: "${service_cidr}"
+      cluster-dns: "${cluster_dns}"
+      flannel-backend: "vxlan"
+      disable:
+        - traefik
+        - servicelb
+      tls-cert-file: "/var/lib/rancher/k3s/server/tls/vault-serving.pem"
+      tls-key-file: "/var/lib/rancher/k3s/server/tls/vault-serving-key.pem"
+      write-kubeconfig-mode: "0644"
+      kubelet-arg:
+        - "max-pods=110"
+
+  # K3s installation script
+  - path: /opt/k3s/install-k3s-server.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      echo "=== Starting K3s server installation ==="
+
+      # Update CA trust store with Vault CA
+      update-ca-certificates
+
+      # Prepare K3s directories
+      mkdir -p /var/lib/rancher/k3s/server/tls
+      mkdir -p /etc/rancher/k3s
+
+      # Install K3s
+      echo "Installing K3s ${k3s_version}..."
+      curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION="${k3s_version}" \
+        sh -s - server
+
+      # Wait for K3s to be ready
+      echo "Waiting for K3s to start..."
+      for i in $(seq 1 30); do
+        if /usr/local/bin/kubectl get nodes &>/dev/null; then
+          echo "K3s API server is ready!"
+          break
+        fi
+        echo "Attempt $i/30 - waiting 10s..."
+        sleep 10
+      done
+
+      # Verify installation
+      echo "Verifying K3s installation..."
+      /usr/local/bin/kubectl get nodes
+      /usr/local/bin/kubectl get pods -A
+
+      # Display node token for reference
+      echo "K3s node token:"
+      cat /var/lib/rancher/k3s/server/node-token
+
+      # Pre-create namespaces for platform components
+      /usr/local/bin/kubectl create namespace cert-manager --dry-run=client -o yaml | \
+        /usr/local/bin/kubectl apply -f -
+      /usr/local/bin/kubectl create namespace ingress-nginx --dry-run=client -o yaml | \
+        /usr/local/bin/kubectl apply -f -
+
+      echo "=== K3s server installation complete ===" | logger -t k3s-init
+
+runcmd:
+  - /opt/k3s/install-k3s-server.sh

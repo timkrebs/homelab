@@ -1,0 +1,73 @@
+#cloud-config
+# K3s Agent (Worker): ${node_name}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - jq
+  - open-iscsi
+  - nfs-common
+  - apparmor
+  - apparmor-utils
+
+write_files:
+  # Vault CA certificate chain (for trusting Vault-issued certs)
+  - path: /usr/local/share/ca-certificates/vault-ca.crt
+    permissions: '0644'
+    owner: root:root
+    content: |
+      ${indent(6, tls_ca_chain)}
+
+  # K3s agent config file
+  - path: /etc/rancher/k3s/config.yaml
+    permissions: '0644'
+    owner: root:root
+    content: |
+      node-name: "${node_name}"
+      server: "https://${server_ip}:6443"
+      token: "${k3s_token}"
+      kubelet-arg:
+        - "max-pods=110"
+
+  # K3s agent installation script
+  - path: /opt/k3s/install-k3s-agent.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      echo "=== Starting K3s agent installation on ${node_name} ==="
+
+      # Update CA trust store with Vault CA
+      update-ca-certificates
+
+      # Prepare K3s directories
+      mkdir -p /etc/rancher/k3s
+
+      # Wait for the control plane to be ready before joining
+      echo "Waiting for control plane at ${server_ip}:6443..."
+      for i in $(seq 1 60); do
+        if curl -sk "https://${server_ip}:6443/readyz" 2>/dev/null | grep -q "ok"; then
+          echo "Control plane is ready!"
+          break
+        fi
+        echo "Attempt $i/60 - waiting 10s..."
+        sleep 10
+      done
+
+      # Install K3s agent
+      echo "Installing K3s agent ${k3s_version}..."
+      curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION="${k3s_version}" \
+        sh -s - agent
+
+      # Wait for agent to register
+      sleep 15
+
+      echo "=== K3s agent installation complete on ${node_name} ===" | logger -t k3s-init
+
+runcmd:
+  - /opt/k3s/install-k3s-agent.sh
