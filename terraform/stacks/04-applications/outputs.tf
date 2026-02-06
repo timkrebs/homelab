@@ -1,7 +1,5 @@
-output "vault_url" {
-  description = "URL for Vault UI"
-  value       = "https://vault.${var.domain}"
-}
+# Note: Vault is now deployed via 05-vault stack on dedicated VMs
+# See terraform/stacks/05-vault/ for Vault-related outputs
 
 output "grafana_url" {
   description = "URL for Grafana UI"
@@ -11,11 +9,6 @@ output "grafana_url" {
 output "prometheus_url" {
   description = "URL for Prometheus UI"
   value       = "https://prometheus.${var.domain}"
-}
-
-output "vault_namespace" {
-  description = "Kubernetes namespace for Vault"
-  value       = kubernetes_namespace.vault.metadata[0].name
 }
 
 output "monitoring_namespace" {

@@ -1,0 +1,134 @@
+#!/bin/bash
+set -euo pipefail
+
+# Configuration from Terraform
+VAULT_VERSION="${vault_version}"
+NODE_ID="${node_id}"
+IS_LEADER="${is_leader}"
+
+echo "=== Starting Vault Enterprise installation on $NODE_ID ==="
+
+# Update system and install dependencies
+echo "Installing dependencies..."
+apt-get update -qq
+apt-get install -y -qq curl unzip jq gnupg lsb-release
+
+# Create vault user and group
+echo "Creating vault user..."
+if ! id -u vault &>/dev/null; then
+    useradd --system --home /opt/vault --shell /bin/false vault
+fi
+
+# Create required directories
+echo "Creating directories..."
+mkdir -p /opt/vault/{data,tls,license}
+mkdir -p /etc/vault.d
+mkdir -p /var/log/vault
+
+# Download and install Vault Enterprise
+echo "Downloading Vault Enterprise $VAULT_VERSION..."
+cd /tmp
+VAULT_ZIP="vault_$${VAULT_VERSION}_linux_amd64.zip"
+curl -fsSL "https://releases.hashicorp.com/vault/$${VAULT_VERSION}/$${VAULT_ZIP}" -o vault.zip
+
+echo "Installing Vault binary..."
+unzip -o vault.zip
+mv vault /usr/local/bin/
+chmod +x /usr/local/bin/vault
+rm vault.zip
+
+# Verify installation
+/usr/local/bin/vault version
+
+# Set capabilities for mlock (prevents swap)
+echo "Setting capabilities..."
+setcap cap_ipc_lock=+ep /usr/local/bin/vault
+
+# Write TLS certificates
+echo "Writing TLS certificates..."
+cat > /opt/vault/tls/vault-cert.pem << 'CERT'
+${tls_cert}
+CERT
+
+cat > /opt/vault/tls/vault-key.pem << 'KEY'
+${tls_key}
+KEY
+
+cat > /opt/vault/tls/ca-cert.pem << 'CA'
+${tls_ca}
+CA
+
+# Write enterprise license
+echo "Writing license..."
+cat > /opt/vault/license/vault.hclic << 'LICENSE'
+${vault_license}
+LICENSE
+
+# Write Vault configuration
+echo "Writing Vault configuration..."
+cat > /etc/vault.d/vault.hcl << 'CONFIG'
+${vault_config}
+CONFIG
+
+# Set ownership and permissions
+echo "Setting permissions..."
+chown -R vault:vault /opt/vault /etc/vault.d /var/log/vault
+chmod 750 /opt/vault/data
+chmod 640 /etc/vault.d/vault.hcl
+chmod 600 /opt/vault/tls/vault-key.pem
+chmod 600 /opt/vault/license/vault.hclic
+chmod 644 /opt/vault/tls/vault-cert.pem
+chmod 644 /opt/vault/tls/ca-cert.pem
+
+# Write systemd service file
+echo "Writing systemd service..."
+cat > /etc/systemd/system/vault.service << 'SERVICE'
+${vault_service}
+SERVICE
+
+# Enable and start Vault service
+echo "Starting Vault service..."
+systemctl daemon-reload
+systemctl enable vault
+systemctl start vault
+
+# Wait for Vault to be ready
+echo "Waiting for Vault to start..."
+sleep 15
+
+# Check Vault status
+echo "Checking Vault status..."
+export VAULT_ADDR="https://127.0.0.1:8200"
+export VAULT_CACERT="/opt/vault/tls/ca-cert.pem"
+
+# Attempt to check status (will show sealed/uninitialized which is expected)
+vault status 2>&1 || true
+
+# Initialize only on the first (leader) node
+if [ "$IS_LEADER" = "true" ]; then
+    echo "Checking if initialization is needed..."
+
+    # Check if already initialized
+    if vault status 2>&1 | grep -q "Initialized.*false"; then
+        echo "Initializing Vault cluster..."
+        vault operator init \
+            -key-shares=5 \
+            -key-threshold=3 \
+            -format=json > /opt/vault/init-keys.json
+
+        chmod 600 /opt/vault/init-keys.json
+        chown vault:vault /opt/vault/init-keys.json
+
+        echo "=============================================="
+        echo "Vault initialized successfully!"
+        echo "Init keys stored in: /opt/vault/init-keys.json"
+        echo "IMPORTANT: Retrieve and securely store these keys!"
+        echo "=============================================="
+    else
+        echo "Vault is already initialized."
+    fi
+else
+    echo "This is a follower node. It will automatically join the cluster via retry_join."
+fi
+
+echo "=== Vault installation complete on $NODE_ID ==="

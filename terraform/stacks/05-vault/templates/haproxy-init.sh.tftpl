@@ -1,0 +1,41 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "=== Starting HAProxy installation ==="
+
+# Update and install HAProxy
+echo "Installing HAProxy..."
+apt-get update -qq
+apt-get install -y -qq haproxy
+
+# Create certificates directory
+echo "Creating certificates directory..."
+mkdir -p /etc/haproxy/certs
+
+# Write the combined certificate (cert + key for HAProxy)
+echo "Writing TLS certificate..."
+cat > /etc/haproxy/certs/vault-combined.pem << 'COMBINED'
+${tls_combined}
+COMBINED
+
+chmod 600 /etc/haproxy/certs/vault-combined.pem
+
+# Write HAProxy configuration
+echo "Writing HAProxy configuration..."
+cat > /etc/haproxy/haproxy.cfg << 'CONFIG'
+${haproxy_config}
+CONFIG
+
+# Validate configuration
+echo "Validating configuration..."
+haproxy -c -f /etc/haproxy/haproxy.cfg
+
+# Restart HAProxy
+echo "Restarting HAProxy..."
+systemctl restart haproxy
+systemctl enable haproxy
+
+# Check status
+systemctl status haproxy --no-pager
+
+echo "=== HAProxy installation complete ==="

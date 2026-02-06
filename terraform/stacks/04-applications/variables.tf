@@ -22,24 +22,8 @@ variable "storage_class" {
   default     = "local-path"
 }
 
-variable "vault_license" {
-  description = "Vault Enterprise license (leave empty for OSS)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "vault_version" {
-  description = "Vault Helm chart version"
-  type        = string
-  default     = "0.27.0"
-}
-
-variable "vault_image_tag" {
-  description = "Vault image tag"
-  type        = string
-  default     = "1.15.6"
-}
+# Note: Vault Enterprise is now deployed on dedicated VMs via 05-vault stack
+# Vault-related variables have been removed from this stack
 
 variable "grafana_admin_password" {
   description = "Grafana admin password"
