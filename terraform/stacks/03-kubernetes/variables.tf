@@ -37,7 +37,7 @@ variable "proxmox_node" {
 variable "template_vm_id" {
   description = "VM template ID to clone (Ubuntu 24.04 Noble)"
   type        = number
-  default     = 900
+  default     = 9000
 }
 
 variable "storage_pool" {
