@@ -397,9 +397,9 @@ resource "vault_pki_secret_backend_role" "kubernetes_server" {
   max_ttl = var.pki_cert_max_ttl
 
   allow_localhost    = true
-  allowed_domains    = [var.pki_domain, "svc.cluster.local", "*.svc.cluster.local"]
+  allowed_domains    = [var.pki_domain, "kubernetes", "kubernetes.default", "kubernetes.default.svc", "kubernetes.default.svc.cluster.local", "svc.cluster.local", "*.svc.cluster.local"]
   allow_subdomains   = true
-  allow_bare_domains = false
+  allow_bare_domains = true
   allow_glob_domains = true
   allow_ip_sans      = true
   server_flag        = true

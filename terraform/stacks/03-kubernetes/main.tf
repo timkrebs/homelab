@@ -73,7 +73,6 @@ resource "vault_pki_secret_backend_cert" "k3s_server" {
   common_name = "k8s-control-01.${var.cloudflare_zone}"
 
   alt_names = [
-    "k8s-control-01",
     "k8s-control-01.${var.cloudflare_zone}",
     "kubernetes",
     "kubernetes.default",
