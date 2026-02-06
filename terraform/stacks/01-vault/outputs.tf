@@ -80,9 +80,9 @@ output "ca_certificate_base64" {
   sensitive   = true
 }
 
-output "cloudflare_origin_cert_expires" {
-  description = "Cloudflare origin certificate expiration date"
-  value       = cloudflare_origin_ca_certificate.haproxy.expires_on
+output "haproxy_cert_expires" {
+  description = "HAProxy TLS certificate expiration date"
+  value       = tls_locally_signed_cert.haproxy.validity_end_time
 }
 
 # -----------------------------------------------------------------------------

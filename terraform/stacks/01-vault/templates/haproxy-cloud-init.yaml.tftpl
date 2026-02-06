@@ -1,0 +1,126 @@
+#cloud-config
+# HAProxy Load Balancer for Vault Enterprise HA Cluster
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - haproxy
+
+write_files:
+  # TLS Certificate (combined cert + key for HAProxy)
+  - path: /etc/haproxy/certs/vault-combined.pem
+    permissions: '0600'
+    owner: root:root
+    content: |
+      ${indent(6, tls_cert)}
+      ${indent(6, tls_key)}
+
+  # CA Certificate
+  - path: /etc/haproxy/certs/ca.pem
+    permissions: '0644'
+    owner: root:root
+    content: |
+      ${indent(6, tls_ca)}
+
+  # HAProxy Configuration
+  - path: /etc/haproxy/haproxy.cfg
+    permissions: '0644'
+    owner: root:root
+    content: |
+      global
+          log /dev/log local0
+          log /dev/log local1 notice
+          chroot /var/lib/haproxy
+          stats socket /run/haproxy/admin.sock mode 660 level admin
+          stats timeout 30s
+          user haproxy
+          group haproxy
+          daemon
+          maxconn 4096
+
+          # TLS settings
+          ssl-default-bind-ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
+          ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+          tune.ssl.default-dh-param 2048
+
+      defaults
+          log     global
+          mode    http
+          option  httplog
+          option  dontlognull
+          option  forwardfor
+          timeout connect 5s
+          timeout client  50s
+          timeout server  50s
+          timeout http-request 10s
+          timeout http-keep-alive 10s
+
+      # Stats endpoint for monitoring
+      listen stats
+          bind *:8404
+          mode http
+          stats enable
+          stats uri /stats
+          stats refresh 10s
+          stats admin if LOCALHOST
+
+      # HTTPS frontend for Vault UI and API
+      frontend vault_https
+          bind *:443 ssl crt /etc/haproxy/certs/vault-combined.pem
+          bind *:80
+
+          # Redirect HTTP to HTTPS
+          http-request redirect scheme https code 301 unless { ssl_fc }
+
+          # Add headers for backend
+          http-request set-header X-Forwarded-Proto https if { ssl_fc }
+          http-request set-header X-Real-IP %[src]
+
+          default_backend vault_servers
+
+      # Vault cluster communication (Raft)
+      frontend vault_cluster
+          bind *:8201
+          mode tcp
+          option tcplog
+          default_backend vault_cluster_backend
+
+      # Backend for Vault API/UI requests
+      backend vault_servers
+          balance roundrobin
+          option httpchk GET /v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200
+          http-check expect status 200
+
+          # Vault nodes with health checks
+%{ for name, ip in vault_nodes ~}
+          server ${name} ${ip}:8200 check ssl verify none inter 5s fall 3 rise 2
+%{ endfor ~}
+
+      # Backend for Vault cluster communication
+      backend vault_cluster_backend
+          mode tcp
+          balance roundrobin
+          option tcp-check
+
+%{ for name, ip in vault_nodes ~}
+          server ${name} ${ip}:8201 check inter 5s fall 3 rise 2
+%{ endfor ~}
+
+runcmd:
+  # Ensure certificates directory exists
+  - mkdir -p /etc/haproxy/certs
+
+  # Fix certificate permissions
+  - chmod 600 /etc/haproxy/certs/vault-combined.pem
+  - chmod 644 /etc/haproxy/certs/ca.pem
+
+  # Validate HAProxy configuration
+  - haproxy -c -f /etc/haproxy/haproxy.cfg
+
+  # Enable and restart HAProxy
+  - systemctl enable haproxy
+  - systemctl restart haproxy
+
+  # Log completion
+  - echo "HAProxy cloud-init configuration complete" | logger -t haproxy-init

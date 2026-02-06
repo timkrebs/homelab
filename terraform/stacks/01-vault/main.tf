@@ -1,6 +1,7 @@
 # -----------------------------------------------------------------------------
 # Vault Enterprise HA Cluster
 # Deploys 3-node Vault cluster with HAProxy load balancer on Proxmox
+# Uses cloud-init for VM provisioning (compatible with HCP Terraform)
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -23,75 +24,8 @@ provider "cloudflare" {
 }
 
 # -----------------------------------------------------------------------------
-# HAProxy Load Balancer VM
-# -----------------------------------------------------------------------------
-
-module "haproxy" {
-  source = "../../modules/proxmox-vm"
-
-  vm_name     = "vault-lb"
-  target_node = var.proxmox_node
-  clone       = var.template_vm_id
-
-  cores  = var.haproxy_cores
-  memory = var.haproxy_memory
-
-  disk = {
-    size    = var.haproxy_disk_size
-    storage = var.storage_pool
-  }
-
-  network = {
-    bridge  = var.network_bridge
-    ip      = "${var.haproxy_ip}/24"
-    gateway = var.network_gateway
-  }
-
-  cloud_init = {
-    user     = var.vm_user
-    ssh_keys = [var.ssh_public_key]
-  }
-
-  tags = ["vault", "haproxy", "load-balancer"]
-}
-
-# -----------------------------------------------------------------------------
-# Vault Enterprise Nodes (3-node HA cluster)
-# -----------------------------------------------------------------------------
-
-module "vault_nodes" {
-  source   = "../../modules/proxmox-vm"
-  for_each = var.vault_ips
-
-  vm_name     = each.key
-  target_node = var.proxmox_node
-  clone       = var.template_vm_id
-
-  cores  = var.vault_cores
-  memory = var.vault_memory
-
-  disk = {
-    size    = var.vault_disk_size
-    storage = var.storage_pool
-  }
-
-  network = {
-    bridge  = var.network_bridge
-    ip      = "${each.value}/24"
-    gateway = var.network_gateway
-  }
-
-  cloud_init = {
-    user     = var.vm_user
-    ssh_keys = [var.ssh_public_key]
-  }
-
-  tags = ["vault", "enterprise", "ha"]
-}
-
-# -----------------------------------------------------------------------------
 # Internal TLS Certificate Authority
-# Used for Vault cluster communication
+# Used for Vault cluster and HAProxy TLS
 # -----------------------------------------------------------------------------
 
 resource "tls_private_key" "ca" {
@@ -114,6 +48,50 @@ resource "tls_self_signed_cert" "ca" {
     "cert_signing",
     "crl_signing",
     "digital_signature",
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# HAProxy TLS Certificate (self-signed from internal CA)
+# Replaces Cloudflare Origin CA since we use private IPs
+# -----------------------------------------------------------------------------
+
+resource "tls_private_key" "haproxy" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "tls_cert_request" "haproxy" {
+  private_key_pem = tls_private_key.haproxy.private_key_pem
+
+  subject {
+    common_name  = var.vault_domain
+    organization = "Homelab"
+  }
+
+  dns_names = [
+    var.vault_domain,
+    "vault-lb.${var.cloudflare_zone}",
+    "localhost",
+  ]
+
+  ip_addresses = [
+    var.haproxy_ip,
+    "127.0.0.1",
+  ]
+}
+
+resource "tls_locally_signed_cert" "haproxy" {
+  cert_request_pem   = tls_cert_request.haproxy.cert_request_pem
+  ca_private_key_pem = tls_private_key.ca.private_key_pem
+  ca_cert_pem        = tls_self_signed_cert.ca.cert_pem
+
+  validity_period_hours = var.tls_cert_validity_hours
+
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
   ]
 }
 
@@ -168,119 +146,123 @@ resource "tls_locally_signed_cert" "vault" {
 }
 
 # -----------------------------------------------------------------------------
-# Cloudflare Origin CA Certificate
-# Used for HAProxy TLS termination (trusted by Cloudflare edge)
+# Cloud-init Snippets (stored in Proxmox for VM bootstrap)
+# This replaces SSH provisioners - VMs configure themselves on first boot
 # -----------------------------------------------------------------------------
 
-resource "tls_private_key" "haproxy" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
+resource "proxmox_virtual_environment_file" "haproxy_cloud_init" {
+  content_type = "snippets"
+  datastore_id = var.snippets_storage
+  node_name    = var.proxmox_node
 
-resource "tls_cert_request" "haproxy" {
-  private_key_pem = tls_private_key.haproxy.private_key_pem
-
-  subject {
-    common_name  = var.vault_domain
-    organization = "Homelab"
-  }
-
-  dns_names = [
-    var.vault_domain,
-    "*.${var.cloudflare_zone}",
-  ]
-}
-
-resource "cloudflare_origin_ca_certificate" "haproxy" {
-  csr                = tls_cert_request.haproxy.cert_request_pem
-  hostnames          = [var.vault_domain, "*.${var.cloudflare_zone}"]
-  request_type       = "origin-rsa"
-  requested_validity = var.cloudflare_origin_cert_validity
-}
-
-# -----------------------------------------------------------------------------
-# Wait for VMs to be ready
-# -----------------------------------------------------------------------------
-
-resource "null_resource" "wait_for_vms" {
-  depends_on = [module.haproxy, module.vault_nodes]
-
-  provisioner "local-exec" {
-    command = "sleep 90"
-  }
-}
-
-# -----------------------------------------------------------------------------
-# HAProxy Installation and Configuration
-# -----------------------------------------------------------------------------
-
-resource "ssh_resource" "haproxy_install" {
-  host        = var.haproxy_ip
-  user        = var.vm_user
-  private_key = var.ssh_private_key
-  timeout     = "10m"
-
-  depends_on = [null_resource.wait_for_vms]
-
-  file {
-    content = templatefile("${path.module}/templates/haproxy-init.sh.tftpl", {
-      tls_combined = "${cloudflare_origin_ca_certificate.haproxy.certificate}\n${tls_private_key.haproxy.private_key_pem}"
-      haproxy_config = templatefile("${path.module}/templates/haproxy.cfg.tftpl", {
-        vault_nodes = var.vault_ips
-      })
+  source_raw {
+    data = templatefile("${path.module}/templates/haproxy-cloud-init.yaml.tftpl", {
+      tls_cert    = tls_locally_signed_cert.haproxy.cert_pem
+      tls_key     = tls_private_key.haproxy.private_key_pem
+      tls_ca      = tls_self_signed_cert.ca.cert_pem
+      vault_nodes = var.vault_ips
     })
-    destination = "/tmp/haproxy-init.sh"
-    permissions = "0755"
+    file_name = "haproxy-cloud-init.yaml"
   }
-
-  commands = [
-    "chmod +x /tmp/haproxy-init.sh",
-    "sudo /tmp/haproxy-init.sh",
-  ]
 }
 
-# -----------------------------------------------------------------------------
-# Vault Installation on Each Node
-# -----------------------------------------------------------------------------
-
-resource "ssh_resource" "vault_install" {
+resource "proxmox_virtual_environment_file" "vault_cloud_init" {
   for_each = var.vault_ips
 
-  host        = each.value
-  user        = var.vm_user
-  private_key = var.ssh_private_key
-  timeout     = "15m"
+  content_type = "snippets"
+  datastore_id = var.snippets_storage
+  node_name    = var.proxmox_node
 
-  depends_on = [null_resource.wait_for_vms]
-
-  file {
-    content = templatefile("${path.module}/templates/vault-init.sh.tftpl", {
+  source_raw {
+    data = templatefile("${path.module}/templates/vault-cloud-init.yaml.tftpl", {
       vault_version = var.vault_version
       node_id       = each.key
+      node_ip       = each.value
       is_leader     = each.key == "vault-01" ? "true" : "false"
       tls_cert      = tls_locally_signed_cert.vault[each.key].cert_pem
       tls_key       = tls_private_key.vault[each.key].private_key_pem
       tls_ca        = tls_self_signed_cert.ca.cert_pem
       vault_license = var.vault_license
-      vault_config = templatefile("${path.module}/templates/vault-config.hcl.tftpl", {
-        node_id     = each.key
-        node_ip     = each.value
-        vault_nodes = var.vault_ips
-      })
-      vault_service = file("${path.module}/templates/vault.service.tftpl")
+      vault_nodes   = var.vault_ips
     })
-    destination = "/tmp/vault-init.sh"
-    permissions = "0755"
+    file_name = "vault-${each.key}-cloud-init.yaml"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# HAProxy Load Balancer VM
+# -----------------------------------------------------------------------------
+
+module "haproxy" {
+  source = "../../modules/proxmox-vm"
+
+  vm_name     = "vault-lb"
+  target_node = var.proxmox_node
+  clone       = var.template_vm_id
+
+  cores  = var.haproxy_cores
+  memory = var.haproxy_memory
+
+  disk = {
+    size    = var.haproxy_disk_size
+    storage = var.storage_pool
   }
 
-  commands = [
-    "chmod +x /tmp/vault-init.sh",
-    "sudo /tmp/vault-init.sh",
-  ]
+  network = {
+    bridge  = var.network_bridge
+    ip      = "${var.haproxy_ip}/24"
+    gateway = var.network_gateway
+  }
+
+  cloud_init = {
+    user     = var.vm_user
+    ssh_keys = [var.ssh_public_key]
+  }
+
+  user_data_file_id = proxmox_virtual_environment_file.haproxy_cloud_init.id
+
+  tags = ["vault", "haproxy", "load-balancer"]
+}
+
+# -----------------------------------------------------------------------------
+# Vault Enterprise Nodes (3-node HA cluster)
+# -----------------------------------------------------------------------------
+
+module "vault_nodes" {
+  source   = "../../modules/proxmox-vm"
+  for_each = var.vault_ips
+
+  vm_name     = each.key
+  target_node = var.proxmox_node
+  clone       = var.template_vm_id
+
+  cores  = var.vault_cores
+  memory = var.vault_memory
+
+  disk = {
+    size    = var.vault_disk_size
+    storage = var.storage_pool
+  }
+
+  network = {
+    bridge  = var.network_bridge
+    ip      = "${each.value}/24"
+    gateway = var.network_gateway
+  }
+
+  cloud_init = {
+    user     = var.vm_user
+    ssh_keys = [var.ssh_public_key]
+  }
+
+  user_data_file_id = proxmox_virtual_environment_file.vault_cloud_init[each.key].id
+
+  tags = ["vault", "enterprise", "ha"]
 }
 
 # -----------------------------------------------------------------------------
 # Cloudflare DNS Records
+# Note: Using proxied=false because private IPs cannot be proxied
 # -----------------------------------------------------------------------------
 
 # Main DNS record for vault.proxcloud.io -> HAProxy
@@ -289,8 +271,8 @@ resource "cloudflare_dns_record" "vault" {
   name    = "vault"
   type    = "A"
   content = var.haproxy_ip
-  ttl     = 1 # Auto (when proxied)
-  proxied = var.cloudflare_proxied
+  ttl     = 300
+  proxied = false # Private IPs cannot be proxied through Cloudflare
   comment = "Vault Enterprise HA cluster - managed by Terraform"
 }
 

@@ -46,6 +46,12 @@ variable "storage_pool" {
   default     = "local-lvm"
 }
 
+variable "snippets_storage" {
+  description = "Proxmox storage for cloud-init snippets (must support snippets content type)"
+  type        = string
+  default     = "local"
+}
+
 # -----------------------------------------------------------------------------
 # SSH Access Variables
 # -----------------------------------------------------------------------------
@@ -62,11 +68,7 @@ variable "ssh_public_key" {
   sensitive   = true
 }
 
-variable "ssh_private_key" {
-  description = "SSH private key for provisioner access"
-  type        = string
-  sensitive   = true
-}
+# Note: ssh_private_key removed - using cloud-init instead of SSH provisioners
 
 # -----------------------------------------------------------------------------
 # Vault Configuration Variables
@@ -187,11 +189,7 @@ variable "vault_domain" {
   default     = "vault.proxcloud.io"
 }
 
-variable "cloudflare_proxied" {
-  description = "Enable Cloudflare proxy (CDN) for Vault DNS"
-  type        = bool
-  default     = true
-}
+# Note: cloudflare_proxied removed - private IPs cannot be proxied through Cloudflare
 
 # -----------------------------------------------------------------------------
 # TLS Configuration Variables
@@ -209,8 +207,4 @@ variable "tls_cert_validity_hours" {
   default     = 8760 # 1 year
 }
 
-variable "cloudflare_origin_cert_validity" {
-  description = "Validity period for Cloudflare origin certificate (days)"
-  type        = number
-  default     = 5475 # 15 years (max for Cloudflare Origin CA)
-}
+# Note: cloudflare_origin_cert_validity removed - using self-signed certs from internal CA

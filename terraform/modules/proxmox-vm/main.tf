@@ -56,7 +56,8 @@ resource "proxmox_virtual_environment_vm" "vm" {
       keys     = var.cloud_init.ssh_keys
     }
 
-    datastore_id = var.disk.storage
+    user_data_file_id = var.user_data_file_id
+    datastore_id      = var.disk.storage
   }
 
   agent {

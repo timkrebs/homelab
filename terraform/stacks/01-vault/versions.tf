@@ -18,14 +18,6 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 5.16"
     }
-    ssh = {
-      source  = "loafoe/ssh"
-      version = "~> 2.7"
-    }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.2"
-    }
     tls = {
       source  = "hashicorp/tls"
       version = "~> 4.2"

@@ -65,3 +65,9 @@ variable "tags" {
   default     = []
   description = "Tags for the VM"
 }
+
+variable "user_data_file_id" {
+  type        = string
+  default     = null
+  description = "Cloud-init user data file ID (snippet stored in Proxmox)"
+}
