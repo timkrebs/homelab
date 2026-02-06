@@ -158,7 +158,7 @@ variable "kubernetes_ca_cert" {
 variable "kubernetes_allowed_namespaces" {
   description = "Namespaces allowed to authenticate via K8s auth"
   type        = list(string)
-  default     = ["default", "kube-system"]
+  default     = ["default", "kube-system", "cert-manager", "ingress-nginx"]
 }
 
 # ------------------------------------------------------------------------------
