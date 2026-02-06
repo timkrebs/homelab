@@ -68,7 +68,11 @@ variable "ssh_public_key" {
   sensitive   = true
 }
 
-# Note: ssh_private_key removed - using cloud-init instead of SSH provisioners
+variable "ssh_private_key" {
+  description = "SSH private key for Proxmox provider file uploads"
+  type        = string
+  sensitive   = true
+}
 
 # -----------------------------------------------------------------------------
 # Vault Configuration Variables

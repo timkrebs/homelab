@@ -14,8 +14,9 @@ provider "proxmox" {
   insecure  = var.proxmox_insecure
 
   ssh {
-    agent    = false
-    username = "root"
+    agent       = false
+    username    = "root"
+    private_key = var.ssh_private_key
   }
 }
 
