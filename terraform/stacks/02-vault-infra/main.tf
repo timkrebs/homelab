@@ -580,10 +580,11 @@ resource "vault_auth_backend" "kubernetes" {
 }
 
 resource "vault_kubernetes_auth_backend_config" "k8s_config" {
-  count              = var.enable_kubernetes_auth ? 1 : 0
-  backend            = vault_auth_backend.kubernetes[0].path
-  kubernetes_host    = var.kubernetes_host
-  kubernetes_ca_cert = var.kubernetes_ca_cert
+  count                = var.enable_kubernetes_auth ? 1 : 0
+  backend              = vault_auth_backend.kubernetes[0].path
+  kubernetes_host      = var.kubernetes_host
+  kubernetes_ca_cert   = var.kubernetes_ca_cert
+  disable_local_ca_jwt = true
 }
 
 # cert-manager role — allows cert-manager to issue certificates from Vault PKI
