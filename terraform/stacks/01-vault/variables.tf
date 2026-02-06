@@ -211,4 +211,20 @@ variable "tls_cert_validity_hours" {
   default     = 8760 # 1 year
 }
 
-# Note: cloudflare_origin_cert_validity removed - using self-signed certs from internal CA
+# -----------------------------------------------------------------------------
+# ACME / Let's Encrypt Configuration
+# -----------------------------------------------------------------------------
+
+variable "acme_server_url" {
+  description = "ACME server URL. Use staging for testing, production for real certs."
+  type        = string
+  default     = "https://acme-v02.api.letsencrypt.org/directory"
+  # Staging: "https://acme-staging-v02.api.letsencrypt.org/directory"
+}
+
+variable "acme_email" {
+  description = "Email address for Let's Encrypt ACME registration"
+  type        = string
+}
+
+# Note: cloudflare_origin_cert_validity removed - using Let's Encrypt certs via ACME

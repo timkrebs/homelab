@@ -22,5 +22,9 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.2"
     }
+    acme = {
+      source  = "vancluever/acme"
+      version = "~> 2.29"
+    }
   }
 }

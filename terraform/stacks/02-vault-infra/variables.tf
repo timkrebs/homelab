@@ -9,6 +9,12 @@ variable "vault_token" {
   sensitive   = true
 }
 
+variable "vault_skip_tls_verify" {
+  description = "Skip TLS verification for self-signed certificates"
+  type        = bool
+  default     = false
+}
+
 variable "engineering_namespace" {
   description = "Name of the engineering namespace"
   type        = string

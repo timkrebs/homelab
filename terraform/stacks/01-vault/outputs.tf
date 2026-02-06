@@ -81,8 +81,13 @@ output "ca_certificate_base64" {
 }
 
 output "haproxy_cert_expires" {
-  description = "HAProxy TLS certificate expiration date"
-  value       = tls_locally_signed_cert.haproxy.validity_end_time
+  description = "HAProxy TLS certificate expiration date (Let's Encrypt)"
+  value       = acme_certificate.haproxy.certificate_not_after
+}
+
+output "haproxy_cert_issuer" {
+  description = "HAProxy TLS certificate issuer"
+  value       = "Let's Encrypt"
 }
 
 # -----------------------------------------------------------------------------

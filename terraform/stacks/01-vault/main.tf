@@ -25,8 +25,18 @@ provider "cloudflare" {
 }
 
 # -----------------------------------------------------------------------------
+# ACME Provider (Let's Encrypt)
+# Uses DNS-01 challenge via Cloudflare for domain validation
+# Works with private IPs since no inbound HTTP required
+# -----------------------------------------------------------------------------
+
+provider "acme" {
+  server_url = var.acme_server_url
+}
+
+# -----------------------------------------------------------------------------
 # Internal TLS Certificate Authority
-# Used for Vault cluster and HAProxy TLS
+# Used for Vault node-to-node and HAProxy-to-Vault communication
 # -----------------------------------------------------------------------------
 
 resource "tls_private_key" "ca" {
@@ -53,9 +63,19 @@ resource "tls_self_signed_cert" "ca" {
 }
 
 # -----------------------------------------------------------------------------
-# HAProxy TLS Certificate (self-signed from internal CA)
-# Replaces Cloudflare Origin CA since we use private IPs
+# Let's Encrypt TLS Certificate for HAProxy (public-facing)
+# Uses DNS-01 challenge via Cloudflare — works with private IPs
 # -----------------------------------------------------------------------------
+
+resource "tls_private_key" "acme_account" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "acme_registration" "vault" {
+  account_key_pem = tls_private_key.acme_account.private_key_pem
+  email_address   = var.acme_email
+}
 
 resource "tls_private_key" "haproxy" {
   algorithm = "RSA"
@@ -73,27 +93,20 @@ resource "tls_cert_request" "haproxy" {
   dns_names = [
     var.vault_domain,
     "vault-lb.${var.cloudflare_zone}",
-    "localhost",
-  ]
-
-  ip_addresses = [
-    var.haproxy_ip,
-    "127.0.0.1",
   ]
 }
 
-resource "tls_locally_signed_cert" "haproxy" {
-  cert_request_pem   = tls_cert_request.haproxy.cert_request_pem
-  ca_private_key_pem = tls_private_key.ca.private_key_pem
-  ca_cert_pem        = tls_self_signed_cert.ca.cert_pem
+resource "acme_certificate" "haproxy" {
+  account_key_pem         = acme_registration.vault.account_key_pem
+  certificate_request_pem = tls_cert_request.haproxy.cert_request_pem
 
-  validity_period_hours = var.tls_cert_validity_hours
+  dns_challenge {
+    provider = "cloudflare"
 
-  allowed_uses = [
-    "key_encipherment",
-    "digital_signature",
-    "server_auth",
-  ]
+    config = {
+      CF_DNS_API_TOKEN = var.cloudflare_api_token
+    }
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -158,7 +171,7 @@ resource "proxmox_virtual_environment_file" "haproxy_cloud_init" {
 
   source_raw {
     data = templatefile("${path.module}/templates/haproxy-cloud-init.yaml.tftpl", {
-      tls_cert    = tls_locally_signed_cert.haproxy.cert_pem
+      tls_cert    = "${acme_certificate.haproxy.certificate_pem}${acme_certificate.haproxy.issuer_pem}"
       tls_key     = tls_private_key.haproxy.private_key_pem
       tls_ca      = tls_self_signed_cert.ca.cert_pem
       vault_nodes = var.vault_ips

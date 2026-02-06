@@ -10,8 +10,9 @@ terraform {
 }
 
 provider "vault" {
-  address = var.vault_address
-  token   = var.vault_token
+  address         = var.vault_address
+  token           = var.vault_token
+  skip_tls_verify = var.vault_skip_tls_verify
   # Self-hosted Vault: no root namespace needed
   # For HCP Vault, set root_namespace = "admin"
 }
