@@ -23,8 +23,8 @@ autoinstall:
     package_upgrade: false
     timezone: Europe/Berlin
     users:
-      - name: timkrebs
-        plain_text_passwd: "Z+eGmMKtb5hn"
+      - name: "${ssh_username}"
+        plain_text_passwd: "${ssh_password}"
         groups: [adm, sudo]
         lock_passwd: false
         sudo: ALL=(ALL) NOPASSWD:ALL
@@ -34,4 +34,4 @@ autoinstall:
     - curtin in-target --target=/target -- systemctl start qemu-guest-agent
     - curtin in-target --target=/target -- systemctl enable ssh
     - curtin in-target --target=/target -- systemctl start ssh
-  shutdown: poweroff
+  shutdown: reboot
