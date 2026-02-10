@@ -8,14 +8,21 @@ updates:
       prefix: "ci"
 
   - package-ecosystem: "terraform"
-    directory: "/terraform/modules/proxmox-vm"
+    directory: "/terraform/modules/terraform-proxmox-ec2"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "deps"
 
   - package-ecosystem: "terraform"
-    directory: "/terraform/stacks/01-infrastructure"
+    directory: "/terraform/modules/terraform-proxmox-pke"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/modules/terraform-proxmox-rds"
     schedule:
       interval: "weekly"
     commit-message:
