@@ -1,0 +1,4 @@
+proxmox_api_url   = "https://192.168.1.10:8006"
+proxmox_api_token = "terraform@pve!terraform-token=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+ssh_public_key    = "ssh-rsa AAAA..."
+# ssh_private_key = provided via TF_VAR_ssh_private_key or HCP Terraform variable

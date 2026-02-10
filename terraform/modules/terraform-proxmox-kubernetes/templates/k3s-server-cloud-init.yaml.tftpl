@@ -1,0 +1,77 @@
+#cloud-config
+# K3s Server (Control Plane): ${node_name}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - jq
+  - open-iscsi
+  - nfs-common
+  - apparmor
+  - apparmor-utils
+
+write_files:
+  - path: /etc/rancher/k3s/config.yaml
+    permissions: '0644'
+    owner: root:root
+    content: |
+      node-name: "${node_name}"
+      token: "${k3s_token}"
+      tls-san:
+        - "${node_ip}"
+        - "${node_name}"
+        - "kubernetes"
+        - "kubernetes.default"
+        - "kubernetes.default.svc"
+        - "kubernetes.default.svc.cluster.local"
+        - "10.43.0.1"
+      cluster-cidr: "${cluster_cidr}"
+      service-cidr: "${service_cidr}"
+      cluster-dns: "${cluster_dns}"
+      flannel-backend: "${flannel_backend}"
+%{ if length(disable_components) > 0 ~}
+      disable:
+%{ for component in disable_components ~}
+        - ${component}
+%{ endfor ~}
+%{ endif ~}
+      write-kubeconfig-mode: "0644"
+      kubelet-arg:
+        - "max-pods=110"
+
+  - path: /opt/k3s/install-k3s-server.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      echo "=== Starting K3s server installation ==="
+
+      mkdir -p /var/lib/rancher/k3s/server/tls
+      mkdir -p /etc/rancher/k3s
+
+      echo "Installing K3s ${k3s_version}..."
+      curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION="${k3s_version}" \
+        sh -s - server
+
+      echo "Waiting for K3s to start..."
+      for i in $(seq 1 30); do
+        if /usr/local/bin/kubectl get nodes &>/dev/null; then
+          echo "K3s API server is ready!"
+          break
+        fi
+        echo "Attempt $i/30 - waiting 10s..."
+        sleep 10
+      done
+
+      /usr/local/bin/kubectl get nodes
+      /usr/local/bin/kubectl get pods -A
+
+      echo "=== K3s server installation complete ===" | logger -t k3s-init
+
+runcmd:
+  - /opt/k3s/install-k3s-server.sh
