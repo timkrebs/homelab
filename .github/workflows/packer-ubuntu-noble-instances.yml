@@ -50,8 +50,9 @@ jobs:
       max-parallel: 1
       matrix: ${{ fromJson(needs.matrix-setup.outputs.matrix) }}
 
-    env:
-      PACKER_DIR: packer/proxmox/ubuntu-noble-instances
+    defaults:
+      run:
+        working-directory: packer/proxmox/ubuntu-noble-instances
 
     steps:
       - name: Checkout
@@ -103,10 +104,10 @@ jobs:
           fi
 
       - name: Packer init
-        run: packer init "$PACKER_DIR"
+        run: packer init .
 
       - name: Packer validate
-        run: packer validate -var "instance_type=${{ matrix.instance_type }}" "$PACKER_DIR"
+        run: packer validate -var "instance_type=${{ matrix.instance_type }}" .
 
       - name: Packer build
-        run: packer build -var "instance_type=${{ matrix.instance_type }}" "$PACKER_DIR"
+        run: packer build -var "instance_type=${{ matrix.instance_type }}" .
