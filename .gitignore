@@ -33,6 +33,7 @@ logs/
 *.pem
 secrets.yml
 credentials.json
+credentials.pkr.hcl
 
 # OS files
 Thumbs.db
