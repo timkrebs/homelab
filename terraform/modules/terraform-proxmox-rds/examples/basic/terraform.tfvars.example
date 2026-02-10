@@ -1,0 +1,4 @@
+proxmox_api_url   = "https://192.168.1.100:8006/api2/json"
+proxmox_api_token = "terraform@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+ssh_public_key    = "ssh-rsa AAAA..."
+db_password       = "change-me-to-a-strong-password"

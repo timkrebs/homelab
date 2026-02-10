@@ -1,0 +1,77 @@
+#cloud-config
+# PostgreSQL ${engine_version}: ${identifier}
+
+package_update: true
+
+packages:
+  - postgresql-${engine_version}
+
+write_files:
+  - path: /etc/postgresql/${engine_version}/main/conf.d/custom.conf
+    permissions: '0644'
+    owner: postgres:postgres
+    content: |
+      # Managed by terraform-proxmox-rds
+      listen_addresses = '${listen_addresses}'
+      port = ${port}
+
+      # Memory tuning (based on ${vm_memory_mb} MB total)
+      shared_buffers = ${shared_buffers_mb}MB
+      effective_cache_size = ${floor(vm_memory_mb * 3 / 4)}MB
+      work_mem = ${max(floor(vm_memory_mb / 64), 4)}MB
+      maintenance_work_mem = ${max(floor(vm_memory_mb / 16), 64)}MB
+
+      # WAL
+      wal_buffers = 16MB
+      max_wal_size = 1GB
+
+      # Connections
+      max_connections = 100
+
+  - path: /opt/rds/setup-postgres.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      echo "=== Configuring PostgreSQL ${engine_version} ==="
+
+      PG_HBA="/etc/postgresql/${engine_version}/main/pg_hba.conf"
+
+      # Add allowed CIDRs to pg_hba.conf
+%{ for cidr in allowed_cidrs ~}
+      echo "host    all    all    ${cidr}    scram-sha-256" >> "$PG_HBA"
+%{ endfor ~}
+
+      # Restart to apply configuration
+      systemctl restart postgresql
+
+      # Wait for PostgreSQL to be ready
+      for i in $(seq 1 30); do
+        if sudo -u postgres pg_isready -q; then
+          echo "PostgreSQL is ready!"
+          break
+        fi
+        echo "Attempt $i/30 - waiting 2s..."
+        sleep 2
+      done
+
+      # Create database and user
+      sudo -u postgres psql -v ON_ERROR_STOP=1 <<'EOSQL'
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${db_username}') THEN
+          CREATE ROLE "${db_username}" WITH LOGIN PASSWORD '${db_password}' CREATEDB;
+        END IF;
+      END
+      $$;
+
+      SELECT 'CREATE DATABASE "${db_name}" OWNER "${db_username}"'
+      WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${db_name}')\gexec
+      EOSQL
+
+      echo "=== PostgreSQL setup complete ==="
+
+runcmd:
+  - /opt/rds/setup-postgres.sh
