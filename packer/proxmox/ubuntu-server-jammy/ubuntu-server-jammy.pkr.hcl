@@ -110,11 +110,13 @@ source "proxmox-iso" "ubuntu-server-jammy" {
   boot_key_interval = "500ms"
 
   # PACKER Autoinstall Settings
-  http_directory = "http"
-  # (Optional) Bind IP Address and Port
-  # http_bind_address = "0.0.0.0"
-  # http_port_min     = 8802
-  # http_port_max     = 8802
+  http_content = {
+    "/user-data" = templatefile("${path.root}/http/user-data.pkrtpl.hcl", {
+      ssh_username = var.ssh_username
+      ssh_password = var.ssh_password
+    })
+    "/meta-data" = ""
+  }
 
   ssh_username = "${var.ssh_username}"
   ssh_password = "${var.ssh_password}"
