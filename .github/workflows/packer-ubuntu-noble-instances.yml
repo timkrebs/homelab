@@ -62,13 +62,11 @@ jobs:
         id: vmid
         run: |
           declare -A VM_IDS=(
-            ["t3.nano"]=9010
-            ["t3.micro"]=9011
-            ["t3.small"]=9012
-            ["t3.medium"]=9013
-            ["t3.large"]=9014
-            ["t3.xlarge"]=9015
-            ["t3.2xlarge"]=9016
+            ["t3.small"]=9010
+            ["t3.medium"]=9011
+            ["t3.large"]=9012
+            ["t3.xlarge"]=9013
+            ["t3.2xlarge"]=9014
           )
           echo "id=${VM_IDS[${{ matrix.instance_type }}]}" >> "$GITHUB_OUTPUT"
 
