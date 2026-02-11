@@ -37,7 +37,7 @@ variable "ssh_password" {
 variable "instance_type" {
   type        = string
   description = "EC2-like instance type (t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge)"
-  default     = "t3.micro"
+  default     = "t3.small"
 
   validation {
     condition     = contains(["t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge"], var.instance_type)
@@ -58,8 +58,6 @@ locals {
   # t3.xlarge    4      16.0
   # t3.2xlarge   8      32.0
   instance_types = {
-    "t3.nano"    = { cores = 2, memory = 1024,  disk = "10G", vm_id = 9010 }
-    "t3.micro"   = { cores = 2, memory = 1024,  disk = "15G", vm_id = 9011 }
     "t3.small"   = { cores = 2, memory = 2048,  disk = "20G", vm_id = 9012 }
     "t3.medium"  = { cores = 2, memory = 4096,  disk = "25G", vm_id = 9013 }
     "t3.large"   = { cores = 2, memory = 8192,  disk = "30G", vm_id = 9014 }
