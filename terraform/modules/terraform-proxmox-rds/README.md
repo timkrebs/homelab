@@ -40,8 +40,6 @@ module "db" {
 
 | Class | vCPUs | Memory | Recommended Use |
 |-------|-------|--------|-----------------|
-| `db.t3.nano` | 2 | 0.5 GB | Testing only |
-| `db.t3.micro` | 2 | 1 GB | Dev / light workloads |
 | `db.t3.small` | 2 | 2 GB | Small applications |
 | `db.t3.medium` | 2 | 4 GB | Medium workloads |
 | `db.t3.large` | 2 | 8 GB | Production |

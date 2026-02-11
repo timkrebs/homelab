@@ -1,16 +1,12 @@
 locals {
   # AWS RDS db.t3 instance class mappings
   # Name            vCPUs  Memory (GiB)
-  # db.t3.nano      2      0.5
-  # db.t3.micro     2      1.0
   # db.t3.small     2      2.0
   # db.t3.medium    2      4.0
   # db.t3.large     2      8.0
   # db.t3.xlarge    4      16.0
   # db.t3.2xlarge   8      32.0
   instance_types = {
-    "db.t3.nano"    = { cores = 2, memory = 512 }
-    "db.t3.micro"   = { cores = 2, memory = 1024 }
     "db.t3.small"   = { cores = 2, memory = 2048 }
     "db.t3.medium"  = { cores = 2, memory = 4096 }
     "db.t3.large"   = { cores = 2, memory = 8192 }

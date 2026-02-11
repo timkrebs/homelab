@@ -61,11 +61,11 @@ variable "control_plane_count" {
 
 variable "control_plane_instance_type" {
   type        = string
-  description = "Instance type for control plane nodes (t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge)"
+  description = "Instance type for control plane nodes (t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge)"
   default     = "t3.large"
 
   validation {
-    condition     = contains(["t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge"], var.control_plane_instance_type)
+    condition     = contains(["t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge"], var.control_plane_instance_type)
     error_message = "control_plane_instance_type must be a valid t3 instance type."
   }
 }
@@ -98,11 +98,11 @@ variable "worker_count" {
 
 variable "worker_instance_type" {
   type        = string
-  description = "Instance type for worker nodes (t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge)"
+  description = "Instance type for worker nodes (t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge)"
   default     = "t3.xlarge"
 
   validation {
-    condition     = contains(["t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge"], var.worker_instance_type)
+    condition     = contains(["t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge"], var.worker_instance_type)
     error_message = "worker_instance_type must be a valid t3 instance type."
   }
 }

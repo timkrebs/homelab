@@ -36,12 +36,12 @@ variable "ssh_password" {
 
 variable "instance_type" {
   type        = string
-  description = "EC2-like instance type (t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge)"
+  description = "EC2-like instance type (t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge)"
   default     = "t3.small"
 
   validation {
-    condition     = contains(["t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge"], var.instance_type)
-    error_message = "Instance_type must be one of: t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge."
+    condition     = contains(["t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge"], var.instance_type)
+    error_message = "Instance_type must be one of: t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge."
   }
 }
 
@@ -50,8 +50,6 @@ locals {
 
   # AWS EC2 t3 instance type mappings
   # Name         vCPUs  Memory (GiB)
-  # t3.nano      2      0.5
-  # t3.micro     2      1.0
   # t3.small     2      2.0
   # t3.medium    2      4.0
   # t3.large     2      8.0

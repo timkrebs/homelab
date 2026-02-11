@@ -74,8 +74,6 @@ module "kubernetes" {
 
 | Type | vCPUs | Memory | Packer Template ID |
 |------|-------|--------|--------------------|
-| `t3.nano` | 2 | 0.5 GB | 9010 |
-| `t3.micro` | 2 | 1 GB | 9011 |
 | `t3.small` | 2 | 2 GB | 9012 |
 | `t3.medium` | 2 | 4 GB | 9013 |
 | `t3.large` | 2 | 8 GB | 9014 |

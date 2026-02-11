@@ -19,12 +19,12 @@ variable "vm_id" {
 
 variable "instance_type" {
   type        = string
-  description = "Instance type defining CPU and memory (e.g., 't3.nano', 't3.micro', 't3.small', 't3.medium', 't3.large', 't3.xlarge', 't3.2xlarge', 'custom')"
-  default     = "t3.micro"
+  description = "Instance type defining CPU and memory (e.g., 't3.small', 't3.medium', 't3.large', 't3.xlarge', 't3.2xlarge', 'custom')"
+  default     = "t3.small"
 
   validation {
-    condition     = contains(["t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge", "custom"], var.instance_type)
-    error_message = "instance_type must be one of: t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge, custom."
+    condition     = contains(["t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge", "custom"], var.instance_type)
+    error_message = "instance_type must be one of: t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge, custom."
   }
 }
 

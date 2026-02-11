@@ -49,8 +49,8 @@ variable "instance_class" {
   default     = "db.t3.micro"
 
   validation {
-    condition     = contains(["db.t3.nano", "db.t3.micro", "db.t3.small", "db.t3.medium", "db.t3.large", "db.t3.xlarge", "db.t3.2xlarge", "custom"], var.instance_class)
-    error_message = "instance_class must be one of: db.t3.nano, db.t3.micro, db.t3.small, db.t3.medium, db.t3.large, db.t3.xlarge, db.t3.2xlarge, custom."
+    condition     = contains(["db.t3.small", "db.t3.medium", "db.t3.large", "db.t3.xlarge", "db.t3.2xlarge", "custom"], var.instance_class)
+    error_message = "instance_class must be one of: db.t3.small, db.t3.medium, db.t3.large, db.t3.xlarge, db.t3.2xlarge, custom."
   }
 }
 
