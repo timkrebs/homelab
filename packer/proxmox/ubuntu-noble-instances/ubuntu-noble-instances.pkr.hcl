@@ -136,7 +136,7 @@ source "proxmox-iso" "ubuntu-noble-instance" {
   boot_key_interval = "500ms"
 
   # PACKER Autoinstall Settings
-  http_bind_address = "0.0.0.0"
+  http_interface = "vmbr0"
   http_content = {
     "/user-data" = templatefile("${path.root}/http/user-data.pkrtpl.hcl", {
       ssh_username = var.ssh_username
