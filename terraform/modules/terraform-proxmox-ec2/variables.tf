@@ -106,6 +106,13 @@ variable "ssh_user" {
   default     = "ubuntu"
 }
 
+variable "ssh_password" {
+  type        = string
+  description = "Cloud-init user password (enables password SSH login)"
+  default     = null
+  sensitive   = true
+}
+
 variable "ssh_public_keys" {
   type        = list(string)
   description = "SSH public keys for VM access"

@@ -63,6 +63,7 @@ resource "proxmox_virtual_environment_vm" "instance" {
 
     user_account {
       username = var.ssh_user
+      password = var.ssh_password
       keys     = var.ssh_public_keys
     }
 
