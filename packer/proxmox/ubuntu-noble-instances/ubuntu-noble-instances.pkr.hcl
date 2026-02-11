@@ -58,7 +58,7 @@ locals {
   # t3.xlarge    4      16.0
   # t3.2xlarge   8      32.0
   instance_types = {
-    "t3.nano"    = { cores = 2, memory = 512,   disk = "10G", vm_id = 9010 }
+    "t3.nano"    = { cores = 2, memory = 1024,  disk = "10G", vm_id = 9010 }
     "t3.micro"   = { cores = 2, memory = 1024,  disk = "15G", vm_id = 9011 }
     "t3.small"   = { cores = 2, memory = 2048,  disk = "20G", vm_id = 9012 }
     "t3.medium"  = { cores = 2, memory = 4096,  disk = "25G", vm_id = 9013 }
@@ -149,7 +149,7 @@ source "proxmox-iso" "ubuntu-noble-instance" {
   ssh_password = "${var.ssh_password}"
 
   # Raise the timeout, when installation takes longer
-  ssh_timeout = "30m"
+  ssh_timeout = "45m"
 }
 
 # Build Definition to create the VM Template
