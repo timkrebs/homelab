@@ -119,16 +119,17 @@ source "proxmox-iso" "win11-gaming" {
   qemu_agent = true
 
   # Windows 11 Installation ISO
-  # ide is more reliably scanned by OVMF for UEFI fallback boot than sata
+  # sata (AHCI/ICH9) is the only CD-ROM bus that OVMF reliably scans on q35.
+  # q35 has no native IDE controller, so type="ide" is invisible to OVMF's boot scan.
   boot_iso {
-    type     = "ide"
+    type     = "sata"
     iso_file = "local:iso/Win11_25H2_English_x64.iso"
     unmount  = true
   }
 
   # VirtIO Drivers ISO — needed for disk driver injection in WinPE and guest tools
   additional_iso_files {
-    type     = "ide"
+    type     = "sata"
     iso_file = var.virtio_win_iso
     unmount  = true
   }
@@ -137,7 +138,7 @@ source "proxmox-iso" "win11-gaming" {
   # Windows Setup automatically detects Autounattend.xml on any mounted drive
   # iso_storage_pool is required so Packer knows where to upload the generated ISO on Proxmox
   additional_iso_files {
-    type              = "ide"
+    type              = "sata"
     iso_storage_pool  = "local"
     cd_content = {
       "Autounattend.xml" = templatefile("${path.root}/files/Autounattend.xml.pkrtpl.hcl", {
@@ -150,12 +151,16 @@ source "proxmox-iso" "win11-gaming" {
   }
 
   # VM Hard Disk Settings
+  # type="scsi" + virtio-scsi-pci creates a VirtIO SCSI device (scsi0).
+  # This matches the viostor.inf driver already injected by Autounattend.xml DriverPaths,
+  # so Windows Setup can see the disk. type="virtio" would create a VirtIO BLK device
+  # (virtio0) which needs vioblk.inf — a different, uninjected driver.
   scsi_controller = "virtio-scsi-pci"
 
   disks {
     disk_size    = local.selected.disk
     storage_pool = local.disk_storage
-    type         = "virtio"
+    type         = "scsi"
   }
 
   # VM CPU Settings
