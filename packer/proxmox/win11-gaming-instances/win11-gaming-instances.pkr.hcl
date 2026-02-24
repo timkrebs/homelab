@@ -104,7 +104,10 @@ source "proxmox-iso" "win11-gaming" {
   efi_config {
     efi_storage_pool  = local.disk_storage
     efi_type          = "4m"
-    pre_enrolled_keys = true
+    # false = Secure Boot keys are NOT pre-enrolled, so OVMF accepts any signed or
+    # unsigned UEFI bootloader during the template build. Secure Boot can be enabled
+    # on individual clones after deployment by enrolling keys via the Proxmox GUI.
+    pre_enrolled_keys = false
   }
 
   tpm_config {
@@ -116,15 +119,16 @@ source "proxmox-iso" "win11-gaming" {
   qemu_agent = true
 
   # Windows 11 Installation ISO
+  # ide is more reliably scanned by OVMF for UEFI fallback boot than sata
   boot_iso {
-    type     = "sata"
+    type     = "ide"
     iso_file = "local:iso/Win11_25H2_English_x64.iso"
     unmount  = true
   }
 
   # VirtIO Drivers ISO — needed for disk driver injection in WinPE and guest tools
   additional_iso_files {
-    type     = "sata"
+    type     = "ide"
     iso_file = var.virtio_win_iso
     unmount  = true
   }
@@ -133,7 +137,7 @@ source "proxmox-iso" "win11-gaming" {
   # Windows Setup automatically detects Autounattend.xml on any mounted drive
   # iso_storage_pool is required so Packer knows where to upload the generated ISO on Proxmox
   additional_iso_files {
-    type              = "sata"
+    type              = "ide"
     iso_storage_pool  = "local"
     cd_content = {
       "Autounattend.xml" = templatefile("${path.root}/files/Autounattend.xml.pkrtpl.hcl", {
