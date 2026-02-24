@@ -177,10 +177,6 @@ source "proxmox-iso" "win11-gaming" {
 
   # Boot Settings
   boot_wait = "5s"
-
-  # Sysprep shutdown — generalises the image so each clone gets a unique SID/hostname
-  shutdown_command = "C:\\Windows\\System32\\Sysprep\\sysprep.exe /generalize /oobe /shutdown /quiet"
-  shutdown_timeout = "30m"
 }
 
 # Build Definition to create the VM Template
@@ -189,8 +185,20 @@ build {
   name    = "win11-gaming-${local.instance_slug}"
   sources = ["source.proxmox-iso.win11-gaming"]
 
-  # Install VirtIO guest tools, enable RDP, configure power plan, then sysprep
+  # Install VirtIO guest tools, enable RDP, configure power plan
   provisioner "powershell" {
     script = "${path.root}/files/setup.ps1"
+  }
+
+  # Generalise the image with sysprep so each clone gets a unique SID/hostname.
+  # Start-Process launches sysprep in the background so the WinRM provisioner
+  # returns success before the VM shuts down. Packer then detects the stopped VM
+  # (via the QEMU guest agent / Proxmox API) and converts it to a template.
+  provisioner "powershell" {
+    inline = [
+      "Write-Host 'Starting Sysprep — VM will shut down automatically...'",
+      "Start-Process -FilePath 'C:\\Windows\\System32\\Sysprep\\sysprep.exe' -ArgumentList '/generalize /oobe /shutdown /quiet' -NoNewWindow",
+      "Start-Sleep -Seconds 30"
+    ]
   }
 }

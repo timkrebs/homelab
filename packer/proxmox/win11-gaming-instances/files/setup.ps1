@@ -164,6 +164,6 @@ foreach ($path in $tempPaths) {
 Write-OK "Temp directories cleaned"
 
 # ---------------------------------------------------------------------------
-# Done — Packer will now issue the sysprep shutdown_command
+# Done — the next Packer provisioner will launch sysprep asynchronously
 # ---------------------------------------------------------------------------
 Write-Host "`n==> Setup complete. Packer will now run sysprep to generalise the image.`n" -ForegroundColor Green
