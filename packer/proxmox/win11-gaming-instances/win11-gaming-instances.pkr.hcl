@@ -119,13 +119,11 @@ source "proxmox-iso" "win11-gaming" {
   qemu_agent = true
 
   # Windows 11 Installation ISO
-  # sata (AHCI/ICH9) is the only CD-ROM bus that OVMF reliably scans on q35.
-  # q35 has no native IDE controller, so type="ide" is invisible to OVMF's boot scan.
-  boot_iso {
-    type     = "sata"
-    iso_file = "local:iso/Win11_25H2_English_x64.iso"
-    unmount  = true
-  }
+  # Using top-level iso_file (not boot_iso block) so Proxmox assigns the CD to its
+  # default device slot (ide2). OVMF's fallback boot scan on q35 starts at ide2 —
+  # using boot_iso { type="sata" } places the ISO at sata0, which is scanned *after*
+  # the VirtIO SCSI disk and is never reached when the disk init stalls the scan.
+  iso_file = "local:iso/Win11_25H2_English_x64.iso"
 
   # VirtIO Drivers ISO — needed for disk driver injection in WinPE and guest tools
   additional_iso_files {
@@ -187,11 +185,12 @@ source "proxmox-iso" "win11-gaming" {
   winrm_use_ssl  = false
 
   # Boot Settings
-  # OVMF initialises in ~3-4s, then the Windows EFI bootloader shows "Press any key
-  # to boot from CD or DVD" for ~5s. Send Enter at 5s and again at 10s to reliably
-  # catch that window regardless of minor timing variations between runs.
-  boot_wait    = "5s"
-  boot_command = ["<return><wait5><return>"]
+  # 15s gives OVMF enough time to POST, init the ICH9/VirtIO devices, and hand off to
+  # the Windows EFI bootloader. In pure UEFI mode the "Press any key" prompt may not
+  # appear at all (the bootloader jumps straight to Setup); the <return> here is a
+  # safety-net for ISOs that do show the 5s countdown.
+  boot_wait    = "15s"
+  boot_command = ["<return>"]
 }
 
 # Build Definition to create the VM Template
