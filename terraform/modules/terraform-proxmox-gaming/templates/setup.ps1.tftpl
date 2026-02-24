@@ -1,0 +1,180 @@
+#ps1_sysnative
+# =============================================================================
+# Gaming VM first-boot setup — runs via cloudbase-init
+# Installs Parsec, optional Steam, and configures Windows for remote gaming
+# with an Nvidia GPU (including Tesla / headless setups).
+# =============================================================================
+
+$ErrorActionPreference = "Continue"
+$ProgressPreference    = "SilentlyContinue"  # speeds up Invoke-WebRequest
+
+# --------------------------------------------------------------------------- #
+# Helper
+# --------------------------------------------------------------------------- #
+function Write-Step { param($msg) Write-Host "==> $msg" }
+
+# --------------------------------------------------------------------------- #
+# Computer name
+# --------------------------------------------------------------------------- #
+Write-Step "Setting computer name to '${computer_name}'"
+Rename-Computer -NewName "${computer_name}" -Force -ErrorAction SilentlyContinue
+
+# --------------------------------------------------------------------------- #
+# Local admin account
+# --------------------------------------------------------------------------- #
+%{ if admin_password != "" }
+Write-Step "Configuring local admin '${admin_username}'"
+$securePass = ConvertTo-SecureString -String "${admin_password}" -AsPlainText -Force
+$existing   = Get-LocalUser -Name "${admin_username}" -ErrorAction SilentlyContinue
+if ($existing) {
+    Set-LocalUser -Name "${admin_username}" -Password $securePass -PasswordNeverExpires $true
+} else {
+    New-LocalUser  -Name "${admin_username}" -Password $securePass `
+                   -FullName "Gaming Admin" -PasswordNeverExpires
+    Add-LocalGroupMember -Group "Administrators" -Member "${admin_username}"
+}
+%{ endif }
+
+# --------------------------------------------------------------------------- #
+# Power plan — High Performance
+# --------------------------------------------------------------------------- #
+Write-Step "Activating High Performance power plan"
+powercfg /setactive SCHEME_MIN
+
+# --------------------------------------------------------------------------- #
+# Enable Remote Desktop (RDP)
+# --------------------------------------------------------------------------- #
+Write-Step "Enabling Remote Desktop"
+Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
+                 -Name "fDenyTSConnections" -Value 0
+Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+# Network Level Authentication — disable for easier initial access
+Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" `
+                 -Name "UserAuthentication" -Value 0
+
+# --------------------------------------------------------------------------- #
+# Windows Update — disable automatic reboots (gaming sessions)
+# --------------------------------------------------------------------------- #
+Write-Step "Disabling automatic Windows Update reboots"
+$wuPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+New-Item -Path $wuPath -Force | Out-Null
+Set-ItemProperty -Path $wuPath -Name "NoAutoRebootWithLoggedOnUsers" -Value 1
+Set-ItemProperty -Path $wuPath -Name "AUOptions"                      -Value 2  # Notify only
+
+# --------------------------------------------------------------------------- #
+# Visual effects — optimise for performance
+# --------------------------------------------------------------------------- #
+Write-Step "Setting visual effects to performance mode"
+$fxPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
+New-Item -Path $fxPath -Force | Out-Null
+Set-ItemProperty -Path $fxPath -Name "VisualFXSetting" -Value 2
+
+# --------------------------------------------------------------------------- #
+# Disable hibernation
+# --------------------------------------------------------------------------- #
+powercfg /hibernate off
+
+# --------------------------------------------------------------------------- #
+# Chocolatey package manager
+# --------------------------------------------------------------------------- #
+Write-Step "Installing Chocolatey"
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = `
+    [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
+    'https://community.chocolatey.org/install.ps1'))
+
+# --------------------------------------------------------------------------- #
+# Common utilities
+# --------------------------------------------------------------------------- #
+Write-Step "Installing common utilities via Chocolatey"
+choco install -y --no-progress 7zip googlechrome notepadplusplus vcredist-all directx
+
+# --------------------------------------------------------------------------- #
+# Parsec — remote gaming host
+# --------------------------------------------------------------------------- #
+Write-Step "Downloading and installing Parsec"
+$parsecInstaller = "$env:TEMP\parsec-windows.exe"
+Invoke-WebRequest -Uri "https://builds.parsec.app/package/parsec-windows.exe" `
+                  -OutFile $parsecInstaller -UseBasicParsing
+# /silent installs without UI; Parsec auto-starts on next login
+Start-Process -FilePath $parsecInstaller -ArgumentList "/silent" -Wait
+Remove-Item $parsecInstaller -ErrorAction SilentlyContinue
+
+# Open Parsec firewall ports (UDP 8000-8100 + TCP fallback)
+New-NetFirewallRule -DisplayName "Parsec UDP"  -Direction Inbound -Protocol UDP `
+                    -LocalPort 8000-8100        -Action Allow -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Parsec TCP"  -Direction Inbound -Protocol TCP `
+                    -LocalPort 8000             -Action Allow -ErrorAction SilentlyContinue
+
+# --------------------------------------------------------------------------- #
+# Parsec Virtual Display Driver
+# Provides a headless virtual screen — essential for Tesla / datacenter GPUs
+# that have no physical display output.
+# --------------------------------------------------------------------------- #
+Write-Step "Installing Parsec Virtual Display Driver (for headless/Tesla GPU)"
+$vddInstaller = "$env:TEMP\parsec-vdd.exe"
+try {
+    Invoke-WebRequest -Uri "https://builds.parsec.app/vdd/parsec-vdd-0.45.0.0.exe" `
+                      -OutFile $vddInstaller -UseBasicParsing
+    Start-Process -FilePath $vddInstaller -ArgumentList "/S" -Wait
+    Remove-Item $vddInstaller -ErrorAction SilentlyContinue
+    Write-Host "    Parsec VDD installed."
+} catch {
+    Write-Warning "    Parsec VDD install failed: $_  — install manually after boot."
+}
+
+# --------------------------------------------------------------------------- #
+# Nvidia driver (Data Center / Tesla)
+# The recommended workflow is to bake the driver into the Windows template.
+# This block downloads and silently installs via Chocolatey as a fallback.
+# NOTE: Tesla T4/P4/A10 require the 'Data Center' driver, NOT the GeForce driver.
+#       Visit https://www.nvidia.com/drivers → Data Center → select your card.
+# --------------------------------------------------------------------------- #
+Write-Step "Checking for Nvidia GPU driver (choco nvidia-display-driver covers GeForce)"
+# Install GeForce driver only if the Tesla driver isn't already present.
+# Remove/replace this section if you pre-install the Tesla driver in your template.
+$nvidiaInstalled = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\* `
+    -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "NVIDIA*Driver*" }
+if (-not $nvidiaInstalled) {
+    Write-Warning "No Nvidia driver detected. For Tesla GPUs, manually install the Data Center driver."
+    Write-Warning "Download: https://www.nvidia.com/drivers  -> Data Center Drivers -> your card."
+} else {
+    Write-Host "    Nvidia driver already present."
+}
+
+# --------------------------------------------------------------------------- #
+# Steam (optional)
+# --------------------------------------------------------------------------- #
+%{ if install_steam }
+Write-Step "Installing Steam"
+$steamInstaller = "$env:TEMP\SteamSetup.exe"
+Invoke-WebRequest -Uri "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe" `
+                  -OutFile $steamInstaller -UseBasicParsing
+Start-Process -FilePath $steamInstaller -ArgumentList "/S" -Wait
+Remove-Item $steamInstaller -ErrorAction SilentlyContinue
+%{ endif }
+
+# --------------------------------------------------------------------------- #
+# Parsec host auto-start at login
+# Parsec registers itself at startup; this ensures it's in the run key.
+# --------------------------------------------------------------------------- #
+$parsecExe = "$env:ProgramFiles\Parsec\parsecd.exe"
+if (Test-Path $parsecExe) {
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" `
+                     -Name "Parsec" -Value "`"$parsecExe`" app_host=1"
+}
+
+# --------------------------------------------------------------------------- #
+# Summary
+# --------------------------------------------------------------------------- #
+Write-Step "Setup complete — please reboot the VM."
+Write-Host ""
+Write-Host "Next steps:"
+Write-Host "  1. Reboot the VM."
+Write-Host "  2. RDP in and sign into Parsec with your account."
+Write-Host "  3. Enable Hosting in Parsec Settings → Host."
+Write-Host "  4. For Tesla/headless: confirm 'Parsec Virtual Display Adapter'"
+Write-Host "     appears in Display Settings and set it as primary."
+Write-Host "  5. Connect from your Mac using the Parsec macOS client."

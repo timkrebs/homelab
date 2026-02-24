@@ -59,7 +59,7 @@ variable "instance_type" {
 
   validation {
     condition     = contains(["g.medium", "g.large", "g.xlarge", "g.2xlarge"], var.instance_type)
-    error_message = "instance_type must be one of: g.medium, g.large, g.xlarge, g.2xlarge."
+    error_message = "Instance_type must be one of: g.medium, g.large, g.xlarge, g.2xlarge."
   }
 }
 
