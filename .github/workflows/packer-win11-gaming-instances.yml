@@ -1,0 +1,110 @@
+name: Build Windows 11 Gaming Instance Templates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packer/proxmox/win11-gaming-instances/**"
+
+  workflow_dispatch:
+    inputs:
+      instance_types:
+        description: "Comma-separated instance types to build (or 'all')"
+        required: false
+        default: "all"
+
+env:
+  PKR_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
+  PKR_VAR_proxmox_api_token_id: ${{ secrets.PROXMOX_API_TOKEN_ID }}
+  PKR_VAR_proxmox_api_token_secret: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
+  PKR_VAR_proxmox_node: ${{ secrets.PROXMOX_NODE }}
+  PKR_VAR_ssh_username: ${{ secrets.SSH_USERNAME }}
+  PKR_VAR_ssh_password: ${{ secrets.SSH_PASSWORD }}
+
+jobs:
+  matrix-setup:
+    name: Resolve instance types
+    runs-on: self-hosted
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Determine instance types
+        id: set-matrix
+        run: |
+          ALL='["g.medium","g.large","g.xlarge","g.2xlarge"]'
+          INPUT="${{ github.event.inputs.instance_types || 'all' }}"
+
+          if [ "$INPUT" = "all" ]; then
+            echo "matrix={\"instance_type\":$ALL}" >> "$GITHUB_OUTPUT"
+          else
+            MATRIX=$(echo "$INPUT" | jq -Rc 'split(",") | map(ltrimstr(" ") | rtrimstr(" "))')
+            echo "matrix={\"instance_type\":$MATRIX}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: "Build ${{ matrix.instance_type }}"
+    needs: matrix-setup
+    runs-on: self-hosted
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJson(needs.matrix-setup.outputs.matrix) }}
+
+    defaults:
+      run:
+        working-directory: packer/proxmox/win11-gaming-instances
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve VM ID
+        id: vmid
+        run: |
+          declare -A VM_IDS=(
+            ["g.medium"]=9020
+            ["g.large"]=9021
+            ["g.xlarge"]=9022
+            ["g.2xlarge"]=9023
+          )
+          echo "id=${VM_IDS[${{ matrix.instance_type }}]}" >> "$GITHUB_OUTPUT"
+
+      - name: Destroy existing template (VM ${{ steps.vmid.outputs.id }})
+        run: |
+          VM_ID="${{ steps.vmid.outputs.id }}"
+
+          # Check if VM exists via Proxmox API
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_API_TOKEN_ID }}=${{ secrets.PROXMOX_API_TOKEN_SECRET }}" \
+            --insecure \
+            "${{ secrets.PROXMOX_API_URL }}/nodes/${{ secrets.PROXMOX_NODE }}/qemu/${VM_ID}/status/current")
+
+          if [ "$STATUS" = "200" ]; then
+            echo "Template VM ${VM_ID} exists, destroying..."
+
+            # Stop VM if running
+            curl -s -X POST \
+              -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_API_TOKEN_ID }}=${{ secrets.PROXMOX_API_TOKEN_SECRET }}" \
+              --insecure \
+              "${{ secrets.PROXMOX_API_URL }}/nodes/${{ secrets.PROXMOX_NODE }}/qemu/${VM_ID}/status/stop" || true
+            sleep 5
+
+            # Destroy VM
+            curl -s -X DELETE \
+              -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_API_TOKEN_ID }}=${{ secrets.PROXMOX_API_TOKEN_SECRET }}" \
+              --insecure \
+              "${{ secrets.PROXMOX_API_URL }}/nodes/${{ secrets.PROXMOX_NODE }}/qemu/${VM_ID}?purge=1&destroy-unreferenced-disks=1"
+            echo "Template VM ${VM_ID} destroyed."
+            sleep 5
+          else
+            echo "Template VM ${VM_ID} does not exist, skipping destroy."
+          fi
+
+      - name: Packer init
+        run: packer init .
+
+      - name: Packer validate
+        run: packer validate -var "instance_type=${{ matrix.instance_type }}" .
+
+      - name: Packer build
+        run: packer build -var "instance_type=${{ matrix.instance_type }}" .
