@@ -131,8 +131,10 @@ source "proxmox-iso" "win11-gaming" {
 
   # Auto-generated CD containing the unattended answer file
   # Windows Setup automatically detects Autounattend.xml on any mounted drive
+  # iso_storage_pool is required so Packer knows where to upload the generated ISO on Proxmox
   additional_iso_files {
-    type     = "sata"
+    type              = "sata"
+    iso_storage_pool  = "local"
     cd_content = {
       "Autounattend.xml" = templatefile("${path.root}/files/Autounattend.xml.pkrtpl.hcl", {
         winrm_username = var.ssh_username
@@ -140,7 +142,7 @@ source "proxmox-iso" "win11-gaming" {
       })
     }
     cd_label = "AUTOUNATTEND"
-    unmount  = false
+    unmount  = true
   }
 
   # VM Hard Disk Settings
