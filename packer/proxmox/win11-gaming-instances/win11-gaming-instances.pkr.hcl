@@ -178,7 +178,11 @@ source "proxmox-iso" "win11-gaming" {
   winrm_use_ssl  = false
 
   # Boot Settings
-  boot_wait = "5s"
+  # OVMF initialises in ~3-4s, then the Windows EFI bootloader shows "Press any key
+  # to boot from CD or DVD" for ~5s. Send Enter at 5s and again at 10s to reliably
+  # catch that window regardless of minor timing variations between runs.
+  boot_wait    = "5s"
+  boot_command = ["<return><wait5><return>"]
 }
 
 # Build Definition to create the VM Template
