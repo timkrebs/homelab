@@ -104,10 +104,9 @@ source "proxmox-iso" "win11-gaming" {
   efi_config {
     efi_storage_pool  = local.disk_storage
     efi_type          = "4m"
-    # false = Secure Boot keys are NOT pre-enrolled, so OVMF accepts any signed or
-    # unsigned UEFI bootloader during the template build. Secure Boot can be enabled
-    # on individual clones after deployment by enrolling keys via the Proxmox GUI.
-    pre_enrolled_keys = false
+    # true = Microsoft's Secure Boot keys are pre-enrolled (matches Proxmox GUI default).
+    # The official Windows 11 ISO is Microsoft-signed so it passes Secure Boot.
+    pre_enrolled_keys = true
   }
 
   tpm_config {
@@ -156,9 +155,13 @@ source "proxmox-iso" "win11-gaming" {
   scsi_controller = "virtio-scsi-pci"
 
   disks {
-    disk_size    = local.selected.disk
-    storage_pool = local.disk_storage
-    type         = "scsi"
+    disk_size         = local.selected.disk
+    storage_pool      = local.disk_storage
+    type              = "scsi"
+    cache             = "writeback"  # Better write performance (Proxmox recommended for Windows)
+    discard           = true         # Enables TRIM so unused blocks are returned to storage
+    io_thread         = true         # Dedicated I/O thread per disk for better throughput
+    ssd               = true         # SSD emulation (rotation_rate=0 hint to guest OS)
   }
 
   # VM CPU Settings

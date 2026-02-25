@@ -138,6 +138,15 @@
         <AcceptEula>true</AcceptEula>
         <FullName>Administrator</FullName>
         <Organization>Homelab</Organization>
+        <!--
+          WillShowUI=Never suppresses the "Enter your product key" screen.
+          Combined with InstallFrom/MetaData above (edition by name), Windows Setup
+          proceeds fully unattended without a licence key during the template build.
+          Activate individual clones with a real key after deployment.
+        -->
+        <ProductKey>
+          <WillShowUI>Never</WillShowUI>
+        </ProductKey>
       </UserData>
 
     </component>
