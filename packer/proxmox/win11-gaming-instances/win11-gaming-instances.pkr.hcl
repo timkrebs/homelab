@@ -100,6 +100,7 @@ source "proxmox-iso" "win11-gaming" {
   # VM System Settings — UEFI + TPM 2.0 required for Windows 11
   bios    = "ovmf"
   machine = "q35"
+  os      = "win11"
 
   efi_config {
     efi_storage_pool  = local.disk_storage
@@ -128,7 +129,7 @@ source "proxmox-iso" "win11-gaming" {
   # VirtIO SCSI disk and may never be reached.
   boot_iso {
     type     = "ide"
-    iso_file = "local:iso/Win11_24H2_EnglishInternational_x64.iso"
+    iso_file = "local:iso/Win11_25H2_EnglishInternational_x64.iso"
     unmount  = true
   }
 
@@ -196,17 +197,17 @@ source "proxmox-iso" "win11-gaming" {
   winrm_use_ssl  = false
 
   # Boot Settings
-  # Timeline after VM start:
-  #   ~2s  OVMF POSTs and tries HARDDISK first (empty → fails quickly)
-  #   ~3s  OVMF loads Windows EFI bootloader from IDE CD
-  #   ~4s  "Press any key to boot from CD or DVD" appears (5s countdown)
-  #   ~9s  Countdown expires — bootloader falls through to next device
+  # boot="order=scsi0;ide0" explicitly tells OVMF: try scsi0 (empty disk) first,
+  # then ide0 (Windows ISO). Without this, OVMF shows the interactive "Please select
+  # boot device" menu and our boot_command never reaches the right prompt.
   #
-  # boot_wait=5s puts us in the middle of the 5s countdown window.
-  # We send <return> three times (1s apart) as a safety net in case
-  # the prompt appears slightly earlier or later than expected.
-  boot_wait    = "5s"
-  boot_command = ["<return><wait1><return><wait1><return>"]
+  # With the explicit order:
+  #   ~1s   scsi0 tried → no EFI bootloader → falls through
+  #   ~3s   ide0 loaded → Windows bootmgr.efi shows "Press any key" (5s countdown)
+  #   5s    Packer sends <enter> → hits the window → Windows Setup starts
+  boot      = "order=scsi0;ide0"
+  boot_wait = "5s"
+  boot_command = ["<enter><enter>"]
 }
 
 # Build Definition to create the VM Template

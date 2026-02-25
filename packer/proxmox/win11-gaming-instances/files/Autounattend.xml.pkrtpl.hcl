@@ -139,13 +139,14 @@
         <FullName>Administrator</FullName>
         <Organization>Homelab</Organization>
         <!--
-          WillShowUI=Never suppresses the "Enter your product key" screen.
-          Combined with InstallFrom/MetaData above (edition by name), Windows Setup
-          proceeds fully unattended without a licence key during the template build.
-          Activate individual clones with a real key after deployment.
+          Generic/KMS key for Windows 11 Pro — allows fully unattended installation
+          without a product key prompt. This key does NOT activate Windows; it only
+          selects the Pro edition and suppresses the Setup UI. Activate individual
+          clones with a real MAK/retail key after deployment.
         -->
         <ProductKey>
-          <WillShowUI>Never</WillShowUI>
+          <Key>W269N-WFGWX-YVC9B-4J6C9-T83GX</Key>
+          <WillShowUI>OnError</WillShowUI>
         </ProductKey>
       </UserData>
 
