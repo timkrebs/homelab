@@ -104,9 +104,13 @@ source "proxmox-iso" "win11-gaming" {
   efi_config {
     efi_storage_pool  = local.disk_storage
     efi_type          = "4m"
-    # true = Microsoft's Secure Boot keys are pre-enrolled (matches Proxmox GUI default).
-    # The official Windows 11 ISO is Microsoft-signed so it passes Secure Boot.
-    pre_enrolled_keys = true
+    # false = OVMF boots in Setup Mode (no Secure Boot enforcement).
+    # Required for template builds: with pre_enrolled_keys=true OVMF performs
+    # a full Secure Boot signature check on every EFI binary before loading it,
+    # and some VirtIO/QEMU EFI paths don't pass that check, causing
+    # "BdsDxe: No bootable option" even when the Windows ISO is present.
+    # Individual clones can have Secure Boot re-enabled after deployment.
+    pre_enrolled_keys = false
   }
 
   tpm_config {
@@ -192,12 +196,17 @@ source "proxmox-iso" "win11-gaming" {
   winrm_use_ssl  = false
 
   # Boot Settings
-  # 15s gives OVMF enough time to POST, init the ICH9/VirtIO devices, and hand off to
-  # the Windows EFI bootloader. In pure UEFI mode the "Press any key" prompt may not
-  # appear at all (the bootloader jumps straight to Setup); the <return> here is a
-  # safety-net for ISOs that do show the 5s countdown.
-  boot_wait    = "15s"
-  boot_command = ["<return>"]
+  # Timeline after VM start:
+  #   ~2s  OVMF POSTs and tries HARDDISK first (empty → fails quickly)
+  #   ~3s  OVMF loads Windows EFI bootloader from IDE CD
+  #   ~4s  "Press any key to boot from CD or DVD" appears (5s countdown)
+  #   ~9s  Countdown expires — bootloader falls through to next device
+  #
+  # boot_wait=5s puts us in the middle of the 5s countdown window.
+  # We send <return> three times (1s apart) as a safety net in case
+  # the prompt appears slightly earlier or later than expected.
+  boot_wait    = "5s"
+  boot_command = ["<return><wait1><return><wait1><return>"]
 }
 
 # Build Definition to create the VM Template
