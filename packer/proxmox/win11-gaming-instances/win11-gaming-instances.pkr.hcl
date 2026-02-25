@@ -124,7 +124,7 @@ source "proxmox-iso" "win11-gaming" {
   # VirtIO SCSI disk and may never be reached.
   boot_iso {
     type     = "ide"
-    iso_file = "local:iso/Win11_25H2_English_x64.iso"
+    iso_file = "local:iso/Win11_24H2_EnglishInternational_x64.iso"
     unmount  = true
   }
 
