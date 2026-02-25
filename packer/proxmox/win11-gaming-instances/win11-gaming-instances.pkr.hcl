@@ -158,7 +158,7 @@ source "proxmox-iso" "win11-gaming" {
     disk_size         = local.selected.disk
     storage_pool      = local.disk_storage
     type              = "scsi"
-    cache             = "writeback"  # Better write performance (Proxmox recommended for Windows)
+    cache_mode        = "writeback"  # Better write performance (Proxmox recommended for Windows)
     discard           = true         # Enables TRIM so unused blocks are returned to storage
     io_thread         = true         # Dedicated I/O thread per disk for better throughput
     ssd               = true         # SSD emulation (rotation_rate=0 hint to guest OS)
