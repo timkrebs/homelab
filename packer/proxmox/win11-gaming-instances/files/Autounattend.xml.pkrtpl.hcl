@@ -114,11 +114,22 @@
 
       <ImageInstall>
         <OSImage>
+          <!--
+            Select Windows 11 Pro by image name so Windows Setup does not
+            pause to ask which edition to install (the multi-edition ISO
+            contains Home, Education, Pro, etc.).  Using the name rather
+            than a numeric index is more robust across ISO revisions.
+          -->
+          <InstallFrom>
+            <MetaData wcm:action="add">
+              <Key>/IMAGE/NAME</Key>
+              <Value>Windows 11 Pro</Value>
+            </MetaData>
+          </InstallFrom>
           <InstallTo>
             <DiskID>0</DiskID>
             <PartitionID>3</PartitionID>
           </InstallTo>
-          <!-- Windows 11 Pro — change Index to 1 for Home if needed -->
           <InstallToAvailablePartition>false</InstallToAvailablePartition>
         </OSImage>
       </ImageInstall>
@@ -143,6 +154,17 @@
                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
       <ComputerName>win11-template</ComputerName>
       <TimeZone>W. Europe Standard Time</TimeZone>
+      <!--
+        Disable UAC in specialize (runs as SYSTEM — no elevation dialog).
+        Required so that FirstLogonCommands run with full admin rights:
+        winrm quickconfig and sc config both fail silently under UAC.
+      -->
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v EnableLUA /t REG_DWORD /d 0 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
     </component>
 
     <component name="Microsoft-Windows-International-Core"
@@ -211,43 +233,64 @@
         Runs synchronously before Packer tries to connect.
       -->
       <FirstLogonCommands>
+        <!--
+          ORDER 1: Install the QEMU guest agent from the VirtIO drivers ISO.
+          packer-plugin-proxmox resolves the VM's IP exclusively via the guest agent
+          interface data. Without the agent running, Packer never learns the IP and
+          WinRM times out after 2 hours regardless of whether WinRM itself is up.
+          Scan drive letters D-K; Setup silently skips letters that do not exist.
+        -->
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
-          <Description>Set network profile to Private (required for WinRM)</Description>
-          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private"</CommandLine>
+          <Description>Install QEMU Guest Agent (required for Proxmox IP reporting)</Description>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "foreach ($d in 'D','E','F','G','H','I','J','K') { $msi = $d + ':\guest-agent\qemu-ga-x86_64.msi'; if (Test-Path $msi) { $a = '/i ' + $msi + ' /qn /norestart'; Start-Process msiexec.exe -ArgumentList $a -Wait -NoNewWindow; break } }"</CommandLine>
         </SynchronousCommand>
+        <!--
+          ORDER 2: Wait for the guest agent service to start and report the VM's
+          IP to the Proxmox API before Packer begins polling for WinRM.
+        -->
         <SynchronousCommand wcm:action="add">
           <Order>2</Order>
+          <Description>Wait for QEMU guest agent to register VM IP with Proxmox</Description>
+          <CommandLine>powershell -NoProfile -Command "Start-Sleep -Seconds 30"</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <Description>Set network profile to Private (required for WinRM)</Description>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private -ErrorAction SilentlyContinue"</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>4</Order>
           <Description>Quick-configure WinRM with defaults</Description>
           <CommandLine>cmd /c winrm quickconfig -q</CommandLine>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>3</Order>
+          <Order>5</Order>
           <Description>Allow unencrypted WinRM (Packer uses HTTP)</Description>
           <CommandLine>cmd /c winrm set winrm/config/service @{AllowUnencrypted="true"}</CommandLine>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>4</Order>
+          <Order>6</Order>
           <Description>Enable Basic auth for WinRM</Description>
           <CommandLine>cmd /c winrm set winrm/config/service/auth @{Basic="true"}</CommandLine>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>5</Order>
+          <Order>7</Order>
           <Description>Raise WinRM shell memory limit</Description>
           <CommandLine>cmd /c winrm set winrm/config/winrs @{MaxMemoryPerShellMB="512"}</CommandLine>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>6</Order>
+          <Order>8</Order>
           <Description>Open WinRM firewall rule</Description>
           <CommandLine>cmd /c netsh advfirewall firewall set rule group="Windows Remote Management" new enable=yes</CommandLine>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>7</Order>
+          <Order>9</Order>
           <Description>Set WinRM service to auto-start</Description>
           <CommandLine>cmd /c sc config winrm start= auto</CommandLine>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>8</Order>
+          <Order>10</Order>
           <Description>Start WinRM service</Description>
           <CommandLine>cmd /c net start winrm</CommandLine>
         </SynchronousCommand>
