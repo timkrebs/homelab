@@ -118,11 +118,15 @@ source "proxmox-iso" "win11-gaming" {
   qemu_agent = true
 
   # Windows 11 Installation ISO
-  # Using top-level iso_file (not boot_iso block) so Proxmox assigns the CD to its
-  # default device slot (ide2). OVMF's fallback boot scan on q35 starts at ide2 —
-  # using boot_iso { type="sata" } places the ISO at sata0, which is scanned *after*
-  # the VirtIO SCSI disk and is never reached when the disk init stalls the scan.
-  iso_file = "local:iso/Win11_25H2_English_x64.iso"
+  # type="ide" assigns the ISO to ide2 (the OVMF default CD-ROM slot on q35).
+  # OVMF scans IDE before SCSI/SATA, so it finds the Windows bootloader first.
+  # Using type="sata" would place it at sata0 which is scanned *after* the
+  # VirtIO SCSI disk and may never be reached.
+  boot_iso {
+    type     = "ide"
+    iso_file = "local:iso/Win11_25H2_English_x64.iso"
+    unmount  = true
+  }
 
   # VirtIO Drivers ISO — needed for disk driver injection in WinPE and guest tools
   additional_iso_files {
@@ -148,11 +152,11 @@ source "proxmox-iso" "win11-gaming" {
   }
 
   # VM Hard Disk Settings
-  # type="scsi" + virtio-scsi-pci creates a VirtIO SCSI device (scsi0).
-  # This matches the viostor.inf driver already injected by Autounattend.xml DriverPaths,
-  # so Windows Setup can see the disk. type="virtio" would create a VirtIO BLK device
-  # (virtio0) which needs vioblk.inf — a different, uninjected driver.
-  scsi_controller = "virtio-scsi-pci"
+  # type="scsi" + virtio-scsi-single creates a VirtIO SCSI device (scsi0).
+  # virtio-scsi-single is required for io_thread=true (one I/O thread per disk).
+  # This matches the viostor.inf driver injected by Autounattend.xml DriverPaths.
+  # type="virtio" would create a VirtIO BLK device (virtio0) needing vioblk.inf.
+  scsi_controller = "virtio-scsi-single"
 
   disks {
     disk_size         = local.selected.disk
